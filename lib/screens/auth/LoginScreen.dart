@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../MainScreen.dart';
 import 'Register.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/custom_textfield.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -58,30 +60,20 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 40),
 
               // 🔹 EMAIL FIELD
-              TextField(
+              CustomTextField(
                 controller: emailController,
-                decoration: InputDecoration(
-                  labelText: "Email",
-                  prefixIcon: const Icon(Icons.email),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                hintText: "Email",
+                prefixIcon: Icons.email,
               ),
 
               const SizedBox(height: 15),
 
               // 🔹 PASSWORD FIELD
-              TextField(
+              CustomTextField(
                 controller: passwordController,
+                hintText: "Password",
+                prefixIcon: Icons.lock,
                 obscureText: true,
-                decoration: InputDecoration(
-                  labelText: "Password",
-                  prefixIcon: const Icon(Icons.lock),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
               ),
 
               const SizedBox(height: 25),
@@ -90,19 +82,10 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white, // ✅ TEXT COLOR FIX
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold, // ✅ MAKES IT CLEAR
-                    ),
-                  ),
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Login"),
+                child: CustomButton(
+                  text: "Login",
+                  isLoading: isLoading,
+                  onPressed: login,
                 ),
               ),
 

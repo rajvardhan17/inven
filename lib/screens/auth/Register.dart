@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'LoginScreen.dart';
 import '../dashboard/AdminHome.dart';
+import '../../widgets/custom_button.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -111,19 +112,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : register,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white, // ✅ TEXT COLOR FIX
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold, // ✅ MAKES IT CLEAR
-                    ),
-                  ),
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Register"),
+                child: CustomButton(
+                  text: "Register",
+                  color: Colors.green,
+                  onPressed: register,
                 ),
               ),
 
