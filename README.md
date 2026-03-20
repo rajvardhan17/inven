@@ -51,3 +51,27 @@ lib/
  ┃ ┣ colors.dart
  ┃ ┗ validators.dart
  ```
+
+ Distributor app 
+ ```bash
+ lib/screens/
+│
+├── admin/
+│   ├── dashboard/
+│   └── inventory/
+│
+├── distributor/
+│   ├── dashboard/
+│   │   └── distributor_home.dart
+│   │
+│   ├── products/
+│   │   └── product_list_screen.dart
+│   │
+│   ├── orders/
+│   │   ├── create_order_screen.dart
+│   │   └── my_orders_screen.dart
+│
+├── auth/
+│   ├── login_screen.dart
+│   └── register_screen.dart
+```
