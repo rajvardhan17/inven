@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../production/production_screen.dart';
+import '../../../data/inventory_data.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -12,25 +13,10 @@ class _InventoryScreenState extends State<InventoryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  List<Map<String, dynamic>> rawMaterials = [
-    {"name": "Wood Powder", "qty": 50.0, "unit": "kg"},
-    {"name": "Perfume", "qty": 20.0, "unit": "L"},
-  ];
-
-  List<Map<String, dynamic>> products = [
-    {"name": "Rose Agarbatti", "qty": 100},
-    {"name": "Sandal Agarbatti", "qty": 80},
-  ];
-
-  Map<String, Map<String, double>> recipe = {
-    "Rose Agarbatti": {
-      "Wood Powder": 0.7,
-      "Perfume": 0.1,
-    },
-    "Sandal Agarbatti": {
-      "Wood Powder": 0.6,
-      "Perfume": 0.2,
-    },
+  // Recipe for production
+  final Map<String, Map<String, double>> recipe = {
+    "Rose Agarbatti": {"Wood Powder": 0.7, "Perfume": 0.1},
+    "Sandal Agarbatti": {"Wood Powder": 0.6, "Perfume": 0.2},
   };
 
   @override
@@ -39,11 +25,11 @@ class _InventoryScreenState extends State<InventoryScreen>
     super.initState();
   }
 
-  // 🔹 Add Dialog
+  // 🔹 Add Raw Material / Product
   void showAddDialog(bool isRaw) {
-    TextEditingController name = TextEditingController();
-    TextEditingController qty = TextEditingController();
-    TextEditingController unit = TextEditingController();
+    final TextEditingController name = TextEditingController();
+    final TextEditingController qty = TextEditingController();
+    final TextEditingController unit = TextEditingController();
 
     showDialog(
       context: context,
@@ -58,7 +44,8 @@ class _InventoryScreenState extends State<InventoryScreen>
                 decoration: const InputDecoration(labelText: "Name")),
             TextField(
                 controller: qty,
-                decoration: const InputDecoration(labelText: "Quantity")),
+                decoration: const InputDecoration(labelText: "Quantity"),
+                keyboardType: TextInputType.number),
             if (isRaw)
               TextField(
                   controller: unit,
@@ -70,15 +57,15 @@ class _InventoryScreenState extends State<InventoryScreen>
             onPressed: () {
               setState(() {
                 if (isRaw) {
-                  rawMaterials.add({
+                  InventoryData.rawMaterials.add({
                     "name": name.text,
-                    "qty": double.parse(qty.text),
-                    "unit": unit.text
+                    "qty": double.tryParse(qty.text) ?? 0,
+                    "unit": unit.text,
                   });
                 } else {
-                  products.add({
+                  InventoryData.products.add({
                     "name": name.text,
-                    "qty": int.parse(qty.text),
+                    "qty": int.tryParse(qty.text) ?? 0,
                   });
                 }
               });
@@ -93,28 +80,27 @@ class _InventoryScreenState extends State<InventoryScreen>
 
   // 🔹 Edit Quantity Dialog
   void _editQtyDialog(int index, bool isRaw) {
-    TextEditingController controller = TextEditingController();
+    final TextEditingController controller = TextEditingController();
+    final item = isRaw
+        ? InventoryData.rawMaterials[index]
+        : InventoryData.products[index];
 
-    controller.text = isRaw
-        ? rawMaterials[index]["qty"].toString()
-        : products[index]["qty"].toString();
+    controller.text = isRaw ? item["qty"].toString() : item["qty"].toString();
 
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Update Quantity"),
         content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-        ),
+            controller: controller, keyboardType: TextInputType.number),
         actions: [
           TextButton(
             onPressed: () {
               setState(() {
                 if (isRaw) {
-                  rawMaterials[index]["qty"] = double.parse(controller.text);
+                  item["qty"] = double.tryParse(controller.text) ?? item["qty"];
                 } else {
-                  products[index]["qty"] = int.parse(controller.text);
+                  item["qty"] = int.tryParse(controller.text) ?? item["qty"];
                 }
               });
               Navigator.pop(context);
@@ -130,7 +116,6 @@ class _InventoryScreenState extends State<InventoryScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-
       appBar: AppBar(
         title: const Text("Inventory"),
         elevation: 0,
@@ -142,30 +127,28 @@ class _InventoryScreenState extends State<InventoryScreen>
           ],
         ),
       ),
-
-      // ❌ NO FLOATING BUTTON HERE
-
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildRawMaterial(),
-          _buildProducts(),
+          _buildRawMaterialTab(),
+          _buildProductsTab(),
         ],
       ),
     );
   }
 
-  // 🔹 RAW MATERIAL UI
-  Widget _buildRawMaterial() {
+  // 🔹 Raw Material Tab
+  Widget _buildRawMaterialTab() {
+    final rawMaterials = InventoryData.rawMaterials;
+
     return Column(
       children: [
         _sectionHeader("Raw Materials", true),
         Expanded(
           child: ListView.builder(
             itemCount: rawMaterials.length,
-            itemBuilder: (context, index) {
+            itemBuilder: (_, index) {
               final item = rawMaterials[index];
-
               return _cardEditable(
                 name: item["name"],
                 subtitle: "${item["qty"]} ${item["unit"]}",
@@ -187,17 +170,18 @@ class _InventoryScreenState extends State<InventoryScreen>
     );
   }
 
-  // 🔹 PRODUCTS UI
-  Widget _buildProducts() {
+  // 🔹 Products Tab
+  Widget _buildProductsTab() {
+    final products = InventoryData.products;
+
     return Column(
       children: [
         _sectionHeader("Finished Products", false),
         Expanded(
           child: ListView.builder(
             itemCount: products.length,
-            itemBuilder: (context, index) {
+            itemBuilder: (_, index) {
               final item = products[index];
-
               return _cardEditable(
                 name: item["name"],
                 subtitle: "Qty: ${item["qty"]}",
@@ -219,7 +203,7 @@ class _InventoryScreenState extends State<InventoryScreen>
     );
   }
 
-  // 🔹 Header
+  // 🔹 Section Header
   Widget _sectionHeader(String title, bool isRaw) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -231,7 +215,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                   const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Row(
             children: [
-              // 🔥 PRODUCE BUTTON (only for products)
+              // 🔹 Produce Button (Products Only)
               if (!isRaw)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -241,19 +225,18 @@ class _InventoryScreenState extends State<InventoryScreen>
                         context,
                         MaterialPageRoute(
                           builder: (_) => ProductionScreen(
-                            rawMaterials: rawMaterials,
-                            products: products,
+                            rawMaterials: InventoryData.rawMaterials,
+                            products: InventoryData.products,
                             recipe: recipe,
                           ),
                         ),
                       ).then((_) {
-                        setState(() {}); // 🔥 refresh after production
+                        setState(() {}); // refresh after production
                       });
                     },
                     child: const Text("Produce"),
                   ),
                 ),
-
               ElevatedButton.icon(
                 onPressed: () => showAddDialog(isRaw),
                 icon: const Icon(Icons.add),
@@ -266,7 +249,7 @@ class _InventoryScreenState extends State<InventoryScreen>
     );
   }
 
-  // 🔹 Editable Card UI
+  // 🔹 Editable Card Widget
   Widget _cardEditable({
     required String name,
     required String subtitle,
@@ -282,7 +265,7 @@ class _InventoryScreenState extends State<InventoryScreen>
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
         ],
       ),
       child: Row(
@@ -307,19 +290,15 @@ class _InventoryScreenState extends State<InventoryScreen>
           Row(
             children: [
               IconButton(
-                onPressed: onRemove,
-                icon: const Icon(Icons.remove_circle_outline),
-              ),
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.remove_circle_outline)),
               IconButton(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_circle_outline),
-              ),
+                  onPressed: onAdd, icon: const Icon(Icons.add_circle_outline)),
               IconButton(
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit, color: Colors.blue),
-              ),
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, color: Colors.blue)),
             ],
-          )
+          ),
         ],
       ),
     );
