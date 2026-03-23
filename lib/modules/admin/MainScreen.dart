@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
+import 'more/more_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -15,7 +16,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> screens = const [
     AdminHome(),
     InventoryScreen(),
-    Center(child: Text("More Screen")),
+    MoreScreen(),
   ];
 
   @override

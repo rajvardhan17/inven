@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../auth/LoginScreen.dart';
+import 'LoginScreen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -26,7 +26,6 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.deepPurple,
-
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
