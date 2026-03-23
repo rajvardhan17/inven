@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../production/production_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -21,13 +22,24 @@ class _InventoryScreenState extends State<InventoryScreen>
     {"name": "Sandal Agarbatti", "qty": 80},
   ];
 
+  Map<String, Map<String, double>> recipe = {
+    "Rose Agarbatti": {
+      "Wood Powder": 0.7,
+      "Perfume": 0.1,
+    },
+    "Sandal Agarbatti": {
+      "Wood Powder": 0.6,
+      "Perfume": 0.2,
+    },
+  };
+
   @override
   void initState() {
     _tabController = TabController(length: 2, vsync: this);
     super.initState();
   }
 
-  // 🔹 Dialog
+  // 🔹 Add Dialog
   void showAddDialog(bool isRaw) {
     TextEditingController name = TextEditingController();
     TextEditingController qty = TextEditingController();
@@ -41,10 +53,16 @@ class _InventoryScreenState extends State<InventoryScreen>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: "Name")),
-            TextField(controller: qty, decoration: const InputDecoration(labelText: "Quantity")),
+            TextField(
+                controller: name,
+                decoration: const InputDecoration(labelText: "Name")),
+            TextField(
+                controller: qty,
+                decoration: const InputDecoration(labelText: "Quantity")),
             if (isRaw)
-              TextField(controller: unit, decoration: const InputDecoration(labelText: "Unit")),
+              TextField(
+                  controller: unit,
+                  decoration: const InputDecoration(labelText: "Unit")),
           ],
         ),
         actions: [
@@ -73,6 +91,41 @@ class _InventoryScreenState extends State<InventoryScreen>
     );
   }
 
+  // 🔹 Edit Quantity Dialog
+  void _editQtyDialog(int index, bool isRaw) {
+    TextEditingController controller = TextEditingController();
+
+    controller.text = isRaw
+        ? rawMaterials[index]["qty"].toString()
+        : products[index]["qty"].toString();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Update Quantity"),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                if (isRaw) {
+                  rawMaterials[index]["qty"] = double.parse(controller.text);
+                } else {
+                  products[index]["qty"] = int.parse(controller.text);
+                }
+              });
+              Navigator.pop(context);
+            },
+            child: const Text("Update"),
+          )
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,6 +142,8 @@ class _InventoryScreenState extends State<InventoryScreen>
           ],
         ),
       ),
+
+      // ❌ NO FLOATING BUTTON HERE
 
       body: TabBarView(
         controller: _tabController,
@@ -110,10 +165,20 @@ class _InventoryScreenState extends State<InventoryScreen>
             itemCount: rawMaterials.length,
             itemBuilder: (context, index) {
               final item = rawMaterials[index];
-              return _card(
-                item["name"],
-                "${item["qty"]} ${item["unit"]}",
-                Colors.blue,
+
+              return _cardEditable(
+                name: item["name"],
+                subtitle: "${item["qty"]} ${item["unit"]}",
+                color: Colors.blue,
+                onAdd: () {
+                  setState(() => item["qty"] += 1);
+                },
+                onRemove: () {
+                  setState(() {
+                    if (item["qty"] > 0) item["qty"] -= 1;
+                  });
+                },
+                onEdit: () => _editQtyDialog(index, true),
               );
             },
           ),
@@ -132,10 +197,20 @@ class _InventoryScreenState extends State<InventoryScreen>
             itemCount: products.length,
             itemBuilder: (context, index) {
               final item = products[index];
-              return _card(
-                item["name"],
-                "Qty: ${item["qty"]}",
-                Colors.green,
+
+              return _cardEditable(
+                name: item["name"],
+                subtitle: "Qty: ${item["qty"]}",
+                color: Colors.green,
+                onAdd: () {
+                  setState(() => item["qty"] += 1);
+                },
+                onRemove: () {
+                  setState(() {
+                    if (item["qty"] > 0) item["qty"] -= 1;
+                  });
+                },
+                onEdit: () => _editQtyDialog(index, false),
               );
             },
           ),
@@ -152,25 +227,54 @@ class _InventoryScreenState extends State<InventoryScreen>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ElevatedButton.icon(
-            onPressed: () => showAddDialog(isRaw),
-            icon: const Icon(Icons.add),
-            label: const Text("Add"),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              // 🔥 PRODUCE BUTTON (only for products)
+              if (!isRaw)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProductionScreen(
+                            rawMaterials: rawMaterials,
+                            products: products,
+                            recipe: recipe,
+                          ),
+                        ),
+                      ).then((_) {
+                        setState(() {}); // 🔥 refresh after production
+                      });
+                    },
+                    child: const Text("Produce"),
+                  ),
+                ),
+
+              ElevatedButton.icon(
+                onPressed: () => showAddDialog(isRaw),
+                icon: const Icon(Icons.add),
+                label: const Text("Add"),
               ),
-            ),
-          )
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // 🔹 Card UI
-  Widget _card(String name, String subtitle, Color color) {
+  // 🔹 Editable Card UI
+  Widget _cardEditable({
+    required String name,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onAdd,
+    required VoidCallback onRemove,
+    required VoidCallback onEdit,
+  }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
@@ -200,6 +304,22 @@ class _InventoryScreenState extends State<InventoryScreen>
               ],
             ),
           ),
+          Row(
+            children: [
+              IconButton(
+                onPressed: onRemove,
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+              IconButton(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit, color: Colors.blue),
+              ),
+            ],
+          )
         ],
       ),
     );

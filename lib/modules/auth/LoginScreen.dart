@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../admin/MainScreen.dart';
 import 'Register.dart';
-import '../../widgets/custom_button.dart';
-import '../../widgets/custom_textfield.dart';
+import '../core/widgets/custom_button.dart';
+import '../core/widgets/custom_textfield.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

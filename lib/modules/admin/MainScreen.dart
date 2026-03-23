@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
-import 'inventory/AddProductScreen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -22,21 +21,11 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: screens[currentIndex],
-
-      // ✅ FLOATING BUTTON ONLY FOR INVENTORY
-      floatingActionButton: currentIndex == 1
-          ? FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddProductScreen()),
-                );
-              },
-              backgroundColor: Colors.deepPurple,
-              child: const Icon(Icons.add, color: Colors.white),
-            )
-          : null,
+      // ✅ Better than direct switching (keeps state)
+      body: IndexedStack(
+        index: currentIndex,
+        children: screens,
+      ),
 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
@@ -56,7 +45,10 @@ class _MainScreenState extends State<MainScreen> {
             icon: Icon(Icons.inventory),
             label: "Inventory",
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.more_vert), label: "More"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.more_vert),
+            label: "More",
+          ),
         ],
       ),
     );
