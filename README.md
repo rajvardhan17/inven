@@ -18,60 +18,91 @@ samples, guidance on mobile development, and a full API reference.
 
 ```bash
 lib/
- ┣ main.dart
-
- ┣ screens/                  # All UI pages
- ┃ ┣ auth/
- ┃ ┃ ┣ login_screen.dart
- ┃ ┃ ┗ register_screen.dart
- ┃ ┃
- ┃ ┣ dashboard/
- ┃ ┃ ┗ admin_home.dart
- ┃ ┃
- ┃ ┣ inventory/
- ┃ ┃ ┣ inventory_screen.dart
- ┃ ┃ ┗ add_product_screen.dart
- ┃ ┃
- ┃ ┗ splash/
- ┃   ┗ splash_screen.dart   # (optional but useful)
-
- ┣ widgets/                 # Reusable UI components
- ┃ ┣ custom_button.dart
- ┃ ┣ custom_textfield.dart
- ┃ ┗ stat_card.dart
-
- ┣ models/                  # Data models
- ┃ ┗ product_model.dart
-
- ┣ services/                # API / backend logic
- ┃ ┣ api_service.dart
- ┃ ┗ auth_service.dart
-
- ┣ utils/                   # Helpers / constants
- ┃ ┣ colors.dart
- ┃ ┗ validators.dart
- ```
-
- Distributor app 
- ```bash
- lib/screens/
 │
-├── admin/
-│   ├── dashboard/
-│   └── inventory/
-│
-├── distributor/
-│   ├── dashboard/
-│   │   └── distributor_home.dart
+├── core/                          🔥 (GLOBAL चीजें)
+│   ├── constants/
+│   │   ├── colors.dart
+│   │   ├── strings.dart
 │   │
-│   ├── products/
-│   │   └── product_list_screen.dart
+│   ├── utils/
+│   │   ├── helpers.dart
+│   │   ├── validators.dart
 │   │
-│   ├── orders/
-│   │   ├── create_order_screen.dart
-│   │   └── my_orders_screen.dart
+│   ├── widgets/                  🔥 reusable UI
+│   │   ├── custom_button.dart
+│   │   ├── custom_textfield.dart
+│   │   ├── alert_banner.dart
 │
-├── auth/
-│   ├── login_screen.dart
-│   └── register_screen.dart
+│
+├── models/                        🔥 ALL MODELS HERE
+│   ├── raw_material_model.dart
+│   ├── product_model.dart
+│   ├── production_model.dart
+│   ├── recipe_model.dart
+│   ├── order_model.dart
+│   ├── shop_model.dart
+│   ├── user_model.dart
+│   ├── stock_alert_model.dart
+│
+│
+├── services/                      🔥 BUSINESS LOGIC
+│   ├── inventory_service.dart
+│   ├── production_service.dart
+│   ├── order_service.dart
+│   ├── payment_service.dart
+│   ├── auth_service.dart
+│
+│
+├── data/                          🔥 TEMP / LOCAL STORAGE
+│   ├── app_data.dart
+│
+│
+├── modules/                       🔥 FEATURE BASED STRUCTURE
+│
+│   ├── admin/
+│   │   ├── dashboard/
+│   │   │   └── admin_dashboard.dart
+│   │   │
+│   │   ├── inventory/
+│   │   │   ├── inventory_screen.dart
+│   │   │   ├── add_product_screen.dart
+│   │   │
+│   │   ├── production/
+│   │   │   ├── production_screen.dart
+│   │   │   ├── production_history_screen.dart
+│   │   │
+│   │   ├── orders/
+│   │   │   ├── orders_screen.dart
+│   │   │   ├── order_detail_screen.dart
+│   │   │
+│   │   ├── payments/
+│   │   │   ├── payments_screen.dart
+│   │   │
+│   │   ├── users/
+│   │   │   ├── salesman_screen.dart
+│   │   │   ├── distributor_screen.dart
+│   │   │
+│
+│   ├── salesman/
+│   │   ├── home/
+│   │   │   └── salesman_home.dart
+│   │   ├── shops/
+│   │   │   ├── add_shop_screen.dart
+│   │   │   ├── shop_list_screen.dart
+│   │   ├── orders/
+│   │   │   ├── create_order_screen.dart
+│
+│   ├── distributor/
+│   │   ├── home/
+│   │   │   └── distributor_home.dart
+│   │   ├── delivery/
+│   │   │   ├── delivery_list_screen.dart
+│   │   │   ├── payment_collection_screen.dart
+│
+│
+├── routes/                        🔥 NAVIGATION
+│   ├── app_routes.dart
+│
+│
+├── main.dart
 ```
