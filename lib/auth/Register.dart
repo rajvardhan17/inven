@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'LoginScreen.dart';
-import '../dashboard/AdminHome.dart';
+import '../admin/dashboard/AdminHome.dart';
 import '../../widgets/custom_button.dart';
 
 class RegisterScreen extends StatefulWidget {

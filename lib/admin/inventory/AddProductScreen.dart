@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/app_data.dart'; // 🔥 IMPORTANT
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -12,21 +13,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final priceController = TextEditingController();
   final quantityController = TextEditingController();
 
+  // 🔹 SAVE PRODUCT FUNCTION
   void saveProduct() {
-    String name = nameController.text;
-    String price = priceController.text;
-    String quantity = quantityController.text;
+    String name = nameController.text.trim();
+    String price = priceController.text.trim();
+    String quantity = quantityController.text.trim();
 
+    // 🔴 VALIDATION
     if (name.isEmpty || price.isEmpty || quantity.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all fields")),
+      );
       return;
     }
 
-    print("Product: $name | ₹$price | Qty: $quantity");
+    // 🔥 STORE DATA (GLOBAL)
+    AppData.products.add({
+      "name": name,
+      "price": price,
+      "quantity": quantity,
+    });
 
+    // DEBUG
+    print(AppData.products);
+
+    // ✅ SUCCESS MESSAGE
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Product Added Successfully")),
+    );
+
+    // 🔙 GO BACK
     Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    priceController.dispose();
+    quantityController.dispose();
+    super.dispose();
   }
 
   @override
@@ -34,6 +59,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
 
+      // 🔹 APP BAR
       appBar: AppBar(
         title: const Text("Add Product"),
         centerTitle: true,
@@ -41,13 +67,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
         foregroundColor: Colors.white,
       ),
 
+      // 🔹 BODY
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Card(
+          elevation: 4,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          elevation: 3,
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -57,12 +84,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 // 🔹 TITLE
                 const Text(
                   "Enter Product Details",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 25),
 
-                // 🔹 PRODUCT NAME
+                // 🔹 NAME
                 _buildTextField(
                   controller: nameController,
                   label: "Product Name",
@@ -91,7 +121,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
                 const SizedBox(height: 30),
 
-                // 🔹 SAVE BUTTON
+                // 🔹 BUTTON
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -103,6 +133,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      elevation: 2,
                     ),
                     child: const Text(
                       "Save Product",
@@ -133,6 +164,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         prefixIcon: Icon(icon),
         filled: true,
         fillColor: Colors.grey.shade100,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,

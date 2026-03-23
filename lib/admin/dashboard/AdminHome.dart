@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class AdminHome extends StatelessWidget {
   const AdminHome({super.key});
@@ -7,13 +8,13 @@ class AdminHome extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             children: [
               _buildHeader(),
               _buildOverview(),
+              _buildSalesTrend(), // NEW
               _buildRecentOrders(),
               _buildQuickActions(),
             ],
@@ -23,7 +24,7 @@ class AdminHome extends StatelessWidget {
     );
   }
 
-  // 🔹 HEADER
+  // HEADER
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -65,7 +66,7 @@ class AdminHome extends StatelessWidget {
     );
   }
 
-  // 🔹 OVERVIEW CARDS
+  // OVERVIEW CARDS
   Widget _buildOverview() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -77,7 +78,6 @@ class AdminHome extends StatelessWidget {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-
           Row(
             children: [
               _card("1,284", "Orders", Icons.shopping_bag, Colors.blue),
@@ -120,7 +120,87 @@ class AdminHome extends StatelessWidget {
     );
   }
 
-  // 🔹 RECENT ORDERS
+  // SALES TREND CHART (NEW)
+  Widget _buildSalesTrend() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        height: 250,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Sales Trend",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: LineChart(
+                LineChartData(
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: true, reservedSize: 32),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          const days = [
+                            "Mon",
+                            "Tue",
+                            "Wed",
+                            "Thu",
+                            "Fri",
+                            "Sat",
+                            "Sun"
+                          ];
+                          return Text(days[value.toInt() % days.length],
+                              style: const TextStyle(fontSize: 10));
+                        },
+                      ),
+                    ),
+                    rightTitles:
+                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles:
+                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      isCurved: true,
+                      color: Colors.deepPurple,
+                      barWidth: 3,
+                      spots: const [
+                        FlSpot(0, 2),
+                        FlSpot(1, 4),
+                        FlSpot(2, 3),
+                        FlSpot(3, 6),
+                        FlSpot(4, 5),
+                        FlSpot(5, 8),
+                        FlSpot(6, 7),
+                      ],
+                      dotData: FlDotData(show: false),
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // RECENT ORDERS
   Widget _buildRecentOrders() {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -146,7 +226,6 @@ class AdminHome extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-
             _orderTile("#4521", "₹124", "Completed", Colors.green),
             _orderTile("#4520", "₹389", "Processing", Colors.orange),
             _orderTile("#4519", "₹56", "Pending", Colors.red),
@@ -176,7 +255,7 @@ class AdminHome extends StatelessWidget {
     );
   }
 
-  // 🔹 QUICK ACTIONS
+  // QUICK ACTIONS
   Widget _buildQuickActions() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -190,7 +269,6 @@ class AdminHome extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

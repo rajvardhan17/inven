@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../MainScreen.dart';
+import '../admin/MainScreen.dart';
 import 'Register.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_textfield.dart';
