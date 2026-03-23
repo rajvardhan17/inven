@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import './user_screen.dart';
+import './shop_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -18,13 +20,24 @@ class MoreScreen extends StatelessWidget {
             icon: Icons.people,
             title: "Manage Users",
             color: Colors.blue,
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UsersScreen()),
+              );
+            },
           ),
           _tile(
             icon: Icons.store,
             title: "Shops",
             color: Colors.green,
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ShopsScreen(),
+                  ));
+            },
           ),
           _tile(
             icon: Icons.bar_chart,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
+import 'orders/orders_screen.dart';
 import 'more/more_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -16,38 +17,50 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> screens = const [
     AdminHome(),
     InventoryScreen(),
+    OrdersScreen(),
     MoreScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ Better than direct switching (keeps state)
-      body: IndexedStack(
-        index: currentIndex,
-        children: screens,
+      // ✅ Safe UI for all devices
+      body: SafeArea(
+        child: IndexedStack(
+          index: currentIndex,
+          children: screens,
+        ),
       ),
 
+      // ✅ Modern Bottom Navigation
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: (index) {
-          setState(() {
-            currentIndex = index;
-          });
+          setState(() => currentIndex = index);
         },
+        type: BottomNavigationBarType.fixed, // 🔥 important for 4 tabs
         selectedItemColor: Colors.deepPurple,
         unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
             label: "Dashboard",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.inventory),
+            icon: Icon(Icons.inventory_2_outlined),
+            activeIcon: Icon(Icons.inventory),
             label: "Inventory",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.more_vert),
+            icon: Icon(Icons.shopping_bag_outlined),
+            activeIcon: Icon(Icons.shopping_bag),
+            label: "Orders",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.more_horiz),
+            activeIcon: Icon(Icons.more_vert),
             label: "More",
           ),
         ],
