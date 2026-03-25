@@ -1,17 +1,23 @@
+import 'package:flutter/material.dart';
+
 // 🔥 GLOBAL INVENTORY DATA (TEMP - Replace with API/DB later)
 
 class InventoryData {
-  // 🔹 RAW MATERIALS
+  // 🔥 NOTIFIER (this makes UI auto refresh)
+  static ValueNotifier<List<Map<String, dynamic>>> productsNotifier =
+      ValueNotifier([
+    {"name": "Rose Agarbatti", "qty": 100},
+    {"name": "Sandal Agarbatti", "qty": 80},
+  ]);
+
+  // 🔹 RAW MATERIALS (no change needed)
   static List<Map<String, dynamic>> rawMaterials = [
     {"name": "Wood Powder", "qty": 50.0, "unit": "kg"},
     {"name": "Perfume", "qty": 20.0, "unit": "L"},
   ];
 
-  // 🔹 FINISHED PRODUCTS
-  static List<Map<String, dynamic>> products = [
-    {"name": "Rose Agarbatti", "qty": 100},
-    {"name": "Sandal Agarbatti", "qty": 80},
-  ];
+  // 🔹 ACCESS PRODUCTS (always use this)
+  static List<Map<String, dynamic>> get products => productsNotifier.value;
 
   // 🔍 FIND PRODUCT (SAFE)
   static Map<String, dynamic>? _findProduct(String productName) {
@@ -22,17 +28,21 @@ class InventoryData {
     }
   }
 
-  // 🔥 INCREASE PRODUCT STOCK (Production use)
+  // 🔥 INCREASE PRODUCT STOCK
   static bool addStock(String productName, int qty) {
     final product = _findProduct(productName);
 
     if (product == null) return false;
 
     product["qty"] += qty;
+
+    // 🔥 notify UI
+    productsNotifier.notifyListeners();
+
     return true;
   }
 
-  // 🔥 DEDUCT STOCK (SAFE)
+  // 🔥 DEDUCT STOCK
   static bool deductStock(String productName, int qty) {
     final product = _findProduct(productName);
 
@@ -40,19 +50,27 @@ class InventoryData {
 
     if (product["qty"] >= qty) {
       product["qty"] -= qty;
+
+      // 🔥 notify UI
+      productsNotifier.notifyListeners();
+
       return true;
     }
 
-    return false; // ❌ Not enough stock
+    return false;
   }
 
-  // 🔥 UPDATE EXACT QTY (Manual edit)
+  // 🔥 UPDATE EXACT QTY
   static bool setStock(String productName, int newQty) {
     final product = _findProduct(productName);
 
     if (product == null) return false;
 
     product["qty"] = newQty;
+
+    // 🔥 notify UI
+    productsNotifier.notifyListeners();
+
     return true;
   }
 

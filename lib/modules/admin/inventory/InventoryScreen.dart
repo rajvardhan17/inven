@@ -13,7 +13,7 @@ class _InventoryScreenState extends State<InventoryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Recipe for production
+  // 🔹 Recipe for production
   final Map<String, Map<String, double>> recipe = {
     "Rose Agarbatti": {"Wood Powder": 0.7, "Perfume": 0.1},
     "Sandal Agarbatti": {"Wood Powder": 0.6, "Perfume": 0.2},
@@ -21,15 +21,28 @@ class _InventoryScreenState extends State<InventoryScreen>
 
   @override
   void initState() {
-    _tabController = TabController(length: 2, vsync: this);
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {}); // 🔥 force rebuild on tab switch
+      }
+    });
   }
+
+  // 🔥 IMPORTANT: Refresh when coming back from other screens
+  /*@override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    setState(() {});
+  }*/
 
   // 🔹 Add Raw Material / Product
   void showAddDialog(bool isRaw) {
-    final TextEditingController name = TextEditingController();
-    final TextEditingController qty = TextEditingController();
-    final TextEditingController unit = TextEditingController();
+    final name = TextEditingController();
+    final qty = TextEditingController();
+    final unit = TextEditingController();
 
     showDialog(
       context: context,
@@ -40,16 +53,19 @@ class _InventoryScreenState extends State<InventoryScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: "Name")),
+              controller: name,
+              decoration: const InputDecoration(labelText: "Name"),
+            ),
             TextField(
-                controller: qty,
-                decoration: const InputDecoration(labelText: "Quantity"),
-                keyboardType: TextInputType.number),
+              controller: qty,
+              decoration: const InputDecoration(labelText: "Quantity"),
+              keyboardType: TextInputType.number,
+            ),
             if (isRaw)
               TextField(
-                  controller: unit,
-                  decoration: const InputDecoration(labelText: "Unit")),
+                controller: unit,
+                decoration: const InputDecoration(labelText: "Unit"),
+              ),
           ],
         ),
         actions: [
@@ -58,14 +74,14 @@ class _InventoryScreenState extends State<InventoryScreen>
               setState(() {
                 if (isRaw) {
                   InventoryData.rawMaterials.add({
-                    "name": name.text,
-                    "qty": double.tryParse(qty.text) ?? 0,
-                    "unit": unit.text,
+                    "name": name.text.trim(),
+                    "qty": double.tryParse(qty.text.trim()) ?? 0,
+                    "unit": unit.text.trim(),
                   });
                 } else {
                   InventoryData.products.add({
-                    "name": name.text,
-                    "qty": int.tryParse(qty.text) ?? 0,
+                    "name": name.text.trim(),
+                    "qty": int.tryParse(qty.text.trim()) ?? 0,
                   });
                 }
               });
@@ -80,27 +96,31 @@ class _InventoryScreenState extends State<InventoryScreen>
 
   // 🔹 Edit Quantity Dialog
   void _editQtyDialog(int index, bool isRaw) {
-    final TextEditingController controller = TextEditingController();
+    final controller = TextEditingController();
     final item = isRaw
         ? InventoryData.rawMaterials[index]
         : InventoryData.products[index];
 
-    controller.text = isRaw ? item["qty"].toString() : item["qty"].toString();
+    controller.text = item["qty"].toString();
 
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Update Quantity"),
         content: TextField(
-            controller: controller, keyboardType: TextInputType.number),
+          controller: controller,
+          keyboardType: TextInputType.number,
+        ),
         actions: [
           TextButton(
             onPressed: () {
               setState(() {
                 if (isRaw) {
-                  item["qty"] = double.tryParse(controller.text) ?? item["qty"];
+                  item["qty"] =
+                      double.tryParse(controller.text.trim()) ?? item["qty"];
                 } else {
-                  item["qty"] = int.tryParse(controller.text) ?? item["qty"];
+                  item["qty"] =
+                      int.tryParse(controller.text.trim()) ?? item["qty"];
                 }
               });
               Navigator.pop(context);
@@ -114,93 +134,88 @@ class _InventoryScreenState extends State<InventoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text("Inventory"),
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: "Raw Material"),
-            Tab(text: "Products"),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildRawMaterialTab(),
-          _buildProductsTab(),
-        ],
-      ),
-    );
-  }
-
-  // 🔹 Raw Material Tab
-  Widget _buildRawMaterialTab() {
     final rawMaterials = InventoryData.rawMaterials;
-
-    return Column(
-      children: [
-        _sectionHeader("Raw Materials", true),
-        Expanded(
-          child: ListView.builder(
-            itemCount: rawMaterials.length,
-            itemBuilder: (_, index) {
-              final item = rawMaterials[index];
-              return _cardEditable(
-                name: item["name"],
-                subtitle: "${item["qty"]} ${item["unit"]}",
-                color: Colors.blue,
-                onAdd: () {
-                  setState(() => item["qty"] += 1);
-                },
-                onRemove: () {
-                  setState(() {
-                    if (item["qty"] > 0) item["qty"] -= 1;
-                  });
-                },
-                onEdit: () => _editQtyDialog(index, true),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // 🔹 Products Tab
-  Widget _buildProductsTab() {
     final products = InventoryData.products;
 
-    return Column(
-      children: [
-        _sectionHeader("Finished Products", false),
-        Expanded(
-          child: ListView.builder(
-            itemCount: products.length,
-            itemBuilder: (_, index) {
-              final item = products[index];
-              return _cardEditable(
-                name: item["name"],
-                subtitle: "Qty: ${item["qty"]}",
-                color: Colors.green,
-                onAdd: () {
-                  setState(() => item["qty"] += 1);
-                },
-                onRemove: () {
-                  setState(() {
-                    if (item["qty"] > 0) item["qty"] -= 1;
-                  });
-                },
-                onEdit: () => _editQtyDialog(index, false),
-              );
-            },
+    return Scaffold(
+        backgroundColor: const Color(0xFFF5F6FA),
+        appBar: AppBar(
+          title: const Text("Inventory"),
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: "Raw Material"),
+              Tab(text: "Products"),
+            ],
           ),
         ),
-      ],
-    );
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            // 🔹 RAW MATERIAL TAB
+            Column(
+              children: [
+                _sectionHeader("Raw Materials", true),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: rawMaterials.length,
+                    itemBuilder: (_, index) {
+                      final item = rawMaterials[index];
+                      return _cardEditable(
+                        name: item["name"],
+                        subtitle: "${item["qty"]} ${item["unit"]}",
+                        color: Colors.blue,
+                        onAdd: () {
+                          setState(() => item["qty"] += 1);
+                        },
+                        onRemove: () {
+                          setState(() {
+                            if (item["qty"] > 0) item["qty"] -= 1;
+                          });
+                        },
+                        onEdit: () => _editQtyDialog(index, true),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            // 🔥 PRODUCTS TAB (FIXED)
+            KeyedSubtree(
+              key: ValueKey(InventoryData.products
+                  .map((e) => e["qty"])
+                  .join()), // 🔥 forces rebuild when qty changes
+              child: Column(
+                children: [
+                  _sectionHeader("Finished Products", false),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: products.length,
+                      itemBuilder: (_, index) {
+                        final item = products[index];
+                        return _cardEditable(
+                          name: item["name"],
+                          subtitle: "Qty: ${item["qty"]}",
+                          color: Colors.green,
+                          onAdd: () {
+                            setState(() => item["qty"] += 1);
+                          },
+                          onRemove: () {
+                            setState(() {
+                              if (item["qty"] > 0) item["qty"] -= 1;
+                            });
+                          },
+                          onEdit: () => _editQtyDialog(index, false),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ));
   }
 
   // 🔹 Section Header
@@ -215,7 +230,6 @@ class _InventoryScreenState extends State<InventoryScreen>
                   const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Row(
             children: [
-              // 🔹 Produce Button (Products Only)
               if (!isRaw)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -231,7 +245,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                           ),
                         ),
                       ).then((_) {
-                        setState(() {}); // refresh after production
+                        setState(() {}); // 🔥 refresh after production
                       });
                     },
                     child: const Text("Produce"),
@@ -249,7 +263,7 @@ class _InventoryScreenState extends State<InventoryScreen>
     );
   }
 
-  // 🔹 Editable Card Widget
+  // 🔹 Card Widget
   Widget _cardEditable({
     required String name,
     required String subtitle,

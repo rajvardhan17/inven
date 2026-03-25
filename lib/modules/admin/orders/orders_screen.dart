@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'create_order_screen.dart';
-
-// 🔥 Temporary global inventory (later DB/API)
-List<Map<String, dynamic>> globalProducts = [
-  {"name": "Rose Agarbatti", "qty": 100},
-  {"name": "Sandal Agarbatti", "qty": 80},
-];
+import '../../../services/order_service.dart';
+import '../../../data/inventory_data.dart';
+import '../../../core/widgets/custom_button.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -28,7 +25,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       MaterialPageRoute(
         builder: (_) => CreateOrderScreen(
           shops: shops,
-          products: globalProducts,
+          products: InventoryData.products, // ✅ shared data
         ),
       ),
     );
@@ -37,49 +34,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
       setState(() {
         orders.add({
           ...result,
-          "status": "Pending", // ✅ default status
+          "status": "Pending",
         });
       });
     }
   }
 
-  // 🔹 Mark as Packed & Deduct Inventory
-  void _markAsPacked(int index) {
+  // 🔹 Pack Order
+  void _packOrder(int index) {
     final order = orders[index];
 
-    if (order["status"] == "Packed") return; // ❌ prevent double packing
+    final success = OrderService.packOrder(order);
 
-    bool canPack = true;
-
-    // 🔹 Check stock first
-    for (var item in order["items"]) {
-      final product = globalProducts.firstWhere(
-        (p) => p["name"] == item["product"],
-        orElse: () => {},
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Not enough stock")),
       );
-
-      if (product.isEmpty || product["qty"] < item["qty"]) {
-        canPack = false;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Not enough stock for ${item["product"]}"),
-          ),
-        );
-        break;
-      }
+      return;
     }
 
-    if (!canPack) return;
-
-    // 🔹 Deduct stock and update status
     setState(() {
-      for (var item in order["items"]) {
-        final product = globalProducts.firstWhere(
-          (p) => p["name"] == item["product"],
-        );
-        product["qty"] -= item["qty"];
-      }
-
       orders[index]["status"] = "Packed";
     });
   }
@@ -114,7 +88,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 🔹 Shop
+                // 🔹 Shop Name
                 Text(
                   "Shop: ${order["shop"]}",
                   style: const TextStyle(
@@ -124,36 +98,42 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
                 const SizedBox(height: 6),
 
-                // 🔹 Items
-                ...order["items"].map<Widget>((item) => Text(
-                      "${item["product"]} x${item["qty"]}",
-                    )),
+                // 🔹 Items List
+                ...order["items"].map<Widget>(
+                  (item) => Text("${item["product"]} x${item["qty"]}"),
+                ),
 
                 const SizedBox(height: 10),
 
-                // 🔹 Status & Button
+                // 🔹 Status + Button Row
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "Status: ${order["status"]}",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: order["status"] == "Packed"
-                            ? Colors.green
-                            : Colors.orange,
+                    // 🔹 Status
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        "Status: ${order["status"]}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: order["status"] == "Packed"
+                              ? Colors.green
+                              : Colors.orange,
+                        ),
                       ),
                     ),
+
+                    // 🔹 Pack Button
                     if (order["status"] == "Pending")
-                      ElevatedButton(
-                        onPressed: () => _markAsPacked(index),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
+                      Expanded(
+                        flex: 1,
+                        child: CustomButton(
+                          text: "Pack",
+                          height: 40, // 🔥 smaller button
+                          onPressed: () => _packOrder(index),
                         ),
-                        child: const Text("Mark as Packed"),
                       ),
                   ],
-                )
+                ),
               ],
             ),
           );
