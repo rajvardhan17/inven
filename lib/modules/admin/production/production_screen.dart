@@ -50,7 +50,6 @@ class _ProductionScreenState extends State<ProductionScreen> {
       final raw = widget.rawMaterials.firstWhere(
         (e) => e["name"] == item.key,
       );
-
       raw["qty"] -= item.value * qty;
     }
 
@@ -62,11 +61,16 @@ class _ProductionScreenState extends State<ProductionScreen> {
       widget.products[productIndex]["qty"] += qty;
     }
 
-    setState(() {});
+    // 🔥 IMPORTANT: notify inventory UI
+    // (only if using notifier)
+    // InventoryData.productsNotifier.notifyListeners();
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Production Successful ✅")),
     );
+
+    // 🔥 GO BACK + SIGNAL SUCCESS
+    Navigator.pop(context, true);
   }
 
   @override
