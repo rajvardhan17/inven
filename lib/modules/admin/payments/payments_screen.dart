@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../../data/order_data.dart';
+
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class PaymentsScreen extends StatelessWidget {
   const PaymentsScreen({super.key});
@@ -33,7 +41,6 @@ class PaymentsScreen extends StatelessWidget {
           ? const Center(child: Text("No Bills Available"))
           : Column(
               children: [
-                // 🔥 SUMMARY
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Row(
@@ -44,8 +51,6 @@ class PaymentsScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // 🔹 BILL LIST
                 Expanded(
                   child: ListView.builder(
                     itemCount: orders.length,
@@ -91,11 +96,9 @@ class PaymentsScreen extends StatelessWidget {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        shop,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold),
-                                      ),
+                                      Text(shop,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold)),
                                       Text(
                                         "₹${amount.toStringAsFixed(2)}",
                                         style:
@@ -121,10 +124,7 @@ class PaymentsScreen extends StatelessWidget {
                                       ),
                               ],
                             ),
-
                             const SizedBox(height: 10),
-
-                            // 🔥 VIEW BILL BUTTON
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
@@ -148,82 +148,93 @@ class PaymentsScreen extends StatelessWidget {
   // 🔹 BILL POPUP
   void _showBill(BuildContext context, Map<String, dynamic> order) {
     final items = (order["items"] ?? []) as List;
-    final subTotal = (order["subTotal"] ?? 0).toDouble();
-    final gst = (order["gstAmount"] ?? 0).toDouble();
     final total = (order["totalAmount"] ?? 0).toDouble();
+    final upiId = "yourupi@okaxis";
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Invoice"),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 🔥 SHOP HEADER
-                const Text(
-                  "KHOSHBOOWALA",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+      builder: (_) => Dialog(
+        child: Container(
+          width: 400,
+          height: 550,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("KHOSHBOOWALA",
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
+                      const Text("Wholesale & Retail Store"),
+                      const SizedBox(height: 8),
+                      Text("Invoice: ${order["invoiceNo"] ?? "N/A"}"),
+                      Text(
+                          "Date: ${order["date"]?.toString().split(" ")[0] ?? ""}"),
+                      const Divider(),
+                      Text("Customer: ${order["shop"]}",
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      ...items.map<Widget>((item) => Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                  child: Text(
+                                      "${item["product"]} x${item["qty"]}")),
+                              Text("₹${item["total"]}"),
+                            ],
+                          )),
+                      const Divider(),
+                      Text(
+                        "Total: ₹${total.toStringAsFixed(2)}",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text("Scan & Pay"),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: QrImageView(
+                          data: "upi://pay?pa=$upiId&pn=KHOSHBOOWALA&am=$total",
+                          size: 120,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text("UPI ID: $upiId",
+                          style: const TextStyle(color: Colors.grey)),
+                    ],
                   ),
                 ),
-                const Text("Wholesale & Retail Store"),
-                const Text("Indore, Madhya Pradesh"),
-                const SizedBox(height: 10),
-
-                Text("Customer: ${order["shop"]}",
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-
-                const SizedBox(height: 10),
-
-                // 🔹 ITEMS
-                ...items.map<Widget>((item) {
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text("${item["product"]} x${item["qty"]}"),
-                      ),
-                      Text("₹${item["total"]}"),
-                    ],
-                  );
-                }),
-
-                const Divider(),
-
-                _billRow("Subtotal", subTotal),
-                _billRow("GST", gst),
-                const SizedBox(height: 5),
-                _billRow("Total", total, isBold: true),
-              ],
-            ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Close")),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _downloadPDF(order);
+                    },
+                    icon: const Icon(Icons.download),
+                    label: const Text("Download"),
+                  ),
+                ],
+              )
+            ],
           ),
         ),
-
-        // 🔥 ACTION BUTTONS
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              _downloadPDF(order);
-            },
-            icon: const Icon(Icons.download),
-            label: const Text("Download"),
-          ),
-        ],
       ),
     );
   }
 
-  //DOWNLOAD METHOD
+  // 🔥 CLEAN PROFESSIONAL PDF
   Future<void> _downloadPDF(Map<String, dynamic> order) async {
     final pdf = pw.Document();
+
+    final font = await PdfGoogleFonts.notoSansRegular();
 
     final items = (order["items"] ?? []) as List;
     final subTotal = (order["subTotal"] ?? 0).toDouble();
@@ -232,77 +243,82 @@ class PaymentsScreen extends StatelessWidget {
 
     pdf.addPage(
       pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // 🔥 HEADER
-              pw.Text("KHOSHBOOWALA",
-                  style: pw.TextStyle(
-                      fontSize: 20, fontWeight: pw.FontWeight.bold)),
-              pw.Text("Wholesale & Retail Store"),
-              pw.Text("Indore, Madhya Pradesh"),
-
-              pw.SizedBox(height: 10),
-
-              pw.Text("Customer: ${order["shop"]}",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-
-              pw.SizedBox(height: 10),
-
-              // 🔹 ITEMS
-              ...items.map((item) {
-                return pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text("${item["product"]} x${item["qty"]}"),
-                    pw.Text("₹${item["total"]}"),
-                  ],
-                );
-              }),
-
-              pw.Divider(),
-
-              pw.Row(
+        margin: const pw.EdgeInsets.all(24),
+        build: (_) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text("KHOSHBOOWALA",
+                style: pw.TextStyle(
+                    font: font, fontSize: 22, fontWeight: pw.FontWeight.bold)),
+            pw.Text("Wholesale & Retail Store",
+                style: pw.TextStyle(font: font)),
+            pw.SizedBox(height: 10),
+            pw.Divider(),
+            pw.Text("Customer: ${order["shop"]}",
+                style:
+                    pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 15),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              color: PdfColors.grey300,
+              child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("Subtotal"),
-                  pw.Text("₹${subTotal.toStringAsFixed(2)}"),
+                  pw.Text("Item", style: pw.TextStyle(font: font)),
+                  pw.Text("Qty", style: pw.TextStyle(font: font)),
+                  pw.Text("Amount", style: pw.TextStyle(font: font)),
                 ],
               ),
-
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            ),
+            ...items.map((item) => pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(item["product"], style: pw.TextStyle(font: font)),
+                      pw.Text("${item["qty"]}",
+                          style: pw.TextStyle(font: font)),
+                      pw.Text("₹${item["total"]}",
+                          style: pw.TextStyle(font: font)),
+                    ],
+                  ),
+                )),
+            pw.Divider(),
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text("GST"),
-                  pw.Text("₹${gst.toStringAsFixed(2)}"),
+                  pw.Text("Subtotal: ₹$subTotal",
+                      style: pw.TextStyle(font: font)),
+                  pw.Text("GST: ₹$gst", style: pw.TextStyle(font: font)),
+                  pw.Text("Total: ₹$total",
+                      style: pw.TextStyle(
+                          font: font, fontWeight: pw.FontWeight.bold)),
                 ],
               ),
-
-              pw.SizedBox(height: 5),
-
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text("Total",
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text("₹${total.toStringAsFixed(2)}",
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
 
-    // 🔥 OPEN SHARE / DOWNLOAD
-    await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
-    );
+    final bytes = await pdf.save();
+
+    if (kIsWeb) {
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      html.AnchorElement(href: url)
+        ..setAttribute("download", "invoice.pdf")
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+    } else {
+      await Printing.layoutPdf(onLayout: (_) async => bytes);
+    }
   }
 
-  // 🔹 SUMMARY CARD
   Widget _summaryCard(String title, double amount, Color color) {
     return Expanded(
       child: Container(
@@ -317,29 +333,12 @@ class PaymentsScreen extends StatelessWidget {
             Text(title,
                 style: TextStyle(color: color, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            Text(
-              "₹${amount.toStringAsFixed(2)}",
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold, color: color),
-            ),
+            Text("₹${amount.toStringAsFixed(2)}",
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
       ),
-    );
-  }
-
-  // 🔹 BILL ROW
-  Widget _billRow(String label, double amount, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-        Text("₹${amount.toStringAsFixed(2)}",
-            style: TextStyle(
-                fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-      ],
     );
   }
 }
