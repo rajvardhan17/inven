@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
-import "modules/auth/SplashScreen.dart";
+import 'package:provider/provider.dart';
+import 'modules/auth/SplashScreen.dart';
+import 'data/order_data.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => OrderData(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

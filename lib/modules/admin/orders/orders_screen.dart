@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'create_order_screen.dart';
 import '../../../services/order_service.dart';
 import '../../../data/inventory_data.dart';
+import '../../../data/order_data.dart';
 import '../../../core/widgets/custom_button.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -12,8 +14,6 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  List<Map<String, dynamic>> orders = [];
-
   final List<Map<String, dynamic>> shops = [
     {"name": "Sharma Store"},
   ];
@@ -31,20 +31,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
 
     if (result != null) {
-      setState(() {
-        orders.add({
-          ...result,
-          "status": "Pending",
-        });
-      });
+      Provider.of<OrderData>(context, listen: false).addOrder(result);
     }
   }
 
   // 🔹 PACK ORDER
   void _packOrder(int index) {
-    final order = orders[index];
+    final orderData = Provider.of<OrderData>(context, listen: false);
 
-    final success = OrderService.packOrder(order);
+    final success = OrderService.packOrder(orderData.orders[index]);
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -53,13 +48,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
       return;
     }
 
-    setState(() {
-      orders[index]["status"] = "Packed";
-    });
+    orderData.packOrder(index);
   }
 
   @override
   Widget build(BuildContext context) {
+    final orderData = Provider.of<OrderData>(context);
+    final orders = orderData.orders;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(title: const Text("Orders")),
@@ -73,16 +69,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
               itemCount: orders.length,
               itemBuilder: (_, index) {
                 final order = orders[index];
-
                 final items = (order["items"] ?? []) as List;
 
-                // ✅ SAFE VALUES FROM CREATE ORDER SCREEN
+                // ✅ VALUES FROM CREATE ORDER SCREEN
                 final subTotal = (order["subTotal"] ?? 0).toDouble();
-
                 final gstPercent = (order["gstPercent"] ?? 0).toDouble();
-
                 final gstAmount = (order["gstAmount"] ?? 0).toDouble();
-
                 final total = (order["totalAmount"] ?? 0).toDouble();
 
                 return Container(
@@ -93,7 +85,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 6,
                       )
                     ],
@@ -145,10 +137,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       // 🔥 BILL DETAILS
                       _billRow("Subtotal", subTotal),
                       _billRow(
-                          "GST (${gstPercent.toStringAsFixed(0)}%)", gstAmount),
-
+                        "GST (${gstPercent.toStringAsFixed(0)}%)",
+                        gstAmount,
+                      ),
                       const SizedBox(height: 5),
-
                       _billRow("Total", total, isBold: true),
 
                       const SizedBox(height: 10),

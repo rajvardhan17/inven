@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:inven/modules/admin/payments/payments_screen.dart';
 import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
 import 'orders/orders_screen.dart';
 import 'more/more_screen.dart';
+import './payments/payments_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -17,6 +19,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> screens = const [
     AdminHome(),
     InventoryScreen(),
+    PaymentsScreen(),
     OrdersScreen(),
     MoreScreen(),
   ];
@@ -53,6 +56,10 @@ class _MainScreenState extends State<MainScreen> {
             activeIcon: Icon(Icons.inventory),
             label: "Inventory",
           ),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.payment_rounded),
+              activeIcon: Icon(Icons.payment),
+              label: "Payments"),
           BottomNavigationBarItem(
             icon: Icon(Icons.shopping_bag_outlined),
             activeIcon: Icon(Icons.shopping_bag),
