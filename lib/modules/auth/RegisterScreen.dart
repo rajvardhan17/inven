@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../admin/MainScreen.dart';
 import 'LoginScreen.dart';
 import '../../core/widgets/custom_button.dart';
 
@@ -16,29 +20,100 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool isLoading = false;
 
-  void register() {
+  Future<void> register() async {
+    String name = nameController.text.trim();
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
+
+    // 🔍 Validation
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("All fields are required")),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Password must be at least 6 characters")),
+      );
+      return;
+    }
+
     setState(() => isLoading = true);
 
-    // Simulate API call
-    Future.delayed(const Duration(seconds: 2), () {
-      setState(() => isLoading = false);
+    try {
+      // 🔐 1. Create user in Firebase Auth
+      UserCredential userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Registration Successful")));
+      String uid = userCredential.user!.uid;
 
+      // 📦 2. Save user in Firestore
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'userId': uid,
+        'name': name,
+        'email': email,
+        'phone': "",
+        'role': 'user', // change to 'admin' if needed
+        'isActive': true,
+        'createdAt': Timestamp.now(),
+      });
+
+      // 🎉 Success
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Registration Successful")),
+      );
+
+      // 🚀 3. Navigate to Main Screen (auto login)
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const MainScreen()),
       );
-    });
+
+    } on FirebaseAuthException catch (e) {
+      String message = "Registration failed";
+
+      if (e.code == 'email-already-in-use') {
+        message = "Email already exists";
+      } else if (e.code == 'invalid-email') {
+        message = "Invalid email";
+      } else if (e.code == 'weak-password') {
+        message = "Weak password";
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+
+    setState(() => isLoading = false);
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(title: const Text("Register"), centerTitle: true),
+      appBar: AppBar(
+        title: const Text("Register"),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -53,7 +128,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   SizedBox(height: 10),
                   Text(
                     "Create Account",
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     "Register to continue",
@@ -114,13 +190,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: CustomButton(
                   text: "Register",
                   color: Colors.green,
+                  isLoading: isLoading,
                   onPressed: register,
                 ),
               ),
 
               const SizedBox(height: 15),
 
-              // 🔹 GO TO LOGIN
+              // 🔹 LOGIN NAVIGATION
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -129,7 +206,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const LoginScreen(),
+                        ),
                       );
                     },
                     child: const Text(

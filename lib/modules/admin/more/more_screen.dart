@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import './user_screen.dart';
 import './shop_screen.dart';
 
@@ -27,44 +29,74 @@ class MoreScreen extends StatelessWidget {
               );
             },
           ),
+
           _tile(
             icon: Icons.store,
             title: "Shops",
             color: Colors.green,
             onTap: () {
               Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ShopsScreen(),
-                  ));
+                context,
+                MaterialPageRoute(builder: (_) => const ShopsScreen()),
+              );
             },
           ),
+
           _tile(
             icon: Icons.bar_chart,
             title: "Reports",
             color: Colors.orange,
             onTap: () {},
           ),
+
           _tile(
             icon: Icons.settings,
             title: "Settings",
             color: Colors.grey,
             onTap: () {},
           ),
+
           const SizedBox(height: 20),
+
+          /// 🔴 LOGOUT TILE
           _tile(
             icon: Icons.logout,
             title: "Logout",
             color: Colors.red,
-            onTap: () {
-              // logout logic later
-            },
+            onTap: () => _logout(context),
           ),
         ],
       ),
     );
   }
 
+  /// 🔐 LOGOUT FUNCTION
+  Future<void> _logout(BuildContext context) async {
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Logout"),
+        content: const Text("Are you sure you want to logout?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Logout"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseAuth.instance.signOut();
+      // ✅ No navigation needed (AuthWrapper handles it)
+    }
+  }
+
+  /// 🔹 COMMON TILE WIDGET
   Widget _tile({
     required IconData icon,
     required String title,

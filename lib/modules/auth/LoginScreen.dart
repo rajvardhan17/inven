@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../admin/MainScreen.dart';
 import 'RegisterScreen.dart';
 import '../../core/widgets/custom_button.dart';
@@ -17,18 +20,89 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool isLoading = false;
 
-  void login() {
-    setState(() => isLoading = true);
+  void login() async {
+  String email = emailController.text.trim();
+  String password = passwordController.text.trim();
 
-    // Fake delay (simulate API)
-    Future.delayed(const Duration(seconds: 2), () {
-      setState(() => isLoading = false);
+  if (email.isEmpty || password.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please fill all fields")),
+    );
+    return;
+  }
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-      );
-    });
+  setState(() => isLoading = true);
+
+  try {
+    // 🔐 Firebase Login
+    UserCredential userCredential =
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    // ✅ STOP if widget destroyed
+    if (!mounted) return;
+
+    String uid = userCredential.user!.uid;
+
+    // 📦 Get user data
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+
+    if (!mounted) return;
+
+    if (!userDoc.exists) {
+      throw "User data not found";
+    }
+
+    var data = userDoc.data() as Map<String, dynamic>;
+
+    if (data['isActive'] == false) {
+      throw "Account disabled";
+    }
+
+    // ❗ IMPORTANT:
+    // 🚫 DO NOT NAVIGATE HERE
+    // AuthWrapper will automatically move to MainScreen
+
+  } on FirebaseAuthException catch (e) {
+    if (!mounted) return;
+
+    String message = "Login failed";
+
+    if (e.code == 'user-not-found') {
+      message = "No user found";
+    } else if (e.code == 'wrong-password') {
+      message = "Incorrect password";
+    } else if (e.code == 'invalid-email') {
+      message = "Invalid email";
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.toString())),
+    );
+  }
+
+  if (mounted) {
+    setState(() => isLoading = false);
+  }
+}
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -41,14 +115,16 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 🔹 APP TITLE
+
+              // 🔹 TITLE
               Column(
                 children: const [
                   Icon(Icons.store, size: 60, color: Colors.deepPurple),
                   SizedBox(height: 10),
                   Text(
                     "BizAdmin",
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     "Login to continue",
@@ -59,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 40),
 
-              // 🔹 EMAIL FIELD
+              // 🔹 EMAIL
               CustomTextField(
                 controller: emailController,
                 hintText: "Email",
@@ -68,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 15),
 
-              // 🔹 PASSWORD FIELD
+              // 🔹 PASSWORD
               CustomTextField(
                 controller: passwordController,
                 hintText: "Password",
@@ -91,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 15),
 
-              // 🔹 REGISTER TEXT
+              // 🔹 REGISTER
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

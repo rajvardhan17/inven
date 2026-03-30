@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "250868432430",
+    "project_id": "khushboowala-f3063",
+    "storage_bucket": "khushboowala-f3063.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:250868432430:android:8dc2c1b8df733b99eca9bf",
+        "android_client_info": {
+          "package_name": "com.example.inven"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAa_RSmL770GETFQ5feFfjsnz2dEEF8pTc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
