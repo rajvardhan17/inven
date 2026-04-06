@@ -16,6 +16,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController(); // ✅ NEW
   final TextEditingController passwordController = TextEditingController();
 
   bool isLoading = false;
@@ -23,12 +24,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> register() async {
     String name = nameController.text.trim();
     String email = emailController.text.trim();
+    String phone = phoneController.text.trim(); // ✅ NEW
     String password = passwordController.text.trim();
 
     // 🔍 Validation
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+    if (name.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("All fields are required")),
+      );
+      return;
+    }
+
+    if (phone.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter valid 10-digit phone number")),
       );
       return;
     }
@@ -57,8 +66,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'userId': uid,
         'name': name,
         'email': email,
-        'phone': "",
-        'role': 'user', // change to 'admin' if needed
+        'phone': "+91$phone", // ✅ country code added
+        'role': 'user',
         'isActive': true,
         'createdAt': Timestamp.now(),
       });
@@ -68,12 +77,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SnackBar(content: Text("Registration Successful")),
       );
 
-      // 🚀 3. Navigate to Main Screen (auto login)
+      // 🚀 Navigate to Main Screen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const MainScreen()),
       );
-
     } on FirebaseAuthException catch (e) {
       String message = "Registration failed";
 
@@ -88,7 +96,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
-
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
@@ -102,6 +109,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     nameController.dispose();
     emailController.dispose();
+    phoneController.dispose(); // ✅ NEW
     passwordController.dispose();
     super.dispose();
   }
@@ -128,8 +136,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   SizedBox(height: 10),
                   Text(
                     "Create Account",
-                    style: TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold),
+                    style:
+                        TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     "Register to continue",
@@ -160,6 +168,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 decoration: InputDecoration(
                   labelText: "Email",
                   prefixIcon: const Icon(Icons.email),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 15),
+
+              // 🔹 PHONE (NEW)
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: "Phone Number",
+                  prefixIcon: const Icon(Icons.phone),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

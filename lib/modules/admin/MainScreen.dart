@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:inven/modules/admin/payments/payments_screen.dart';
+
 import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
+import 'payments/payments_screen.dart'; // ✅ only one import
 import 'orders/orders_screen.dart';
 import 'more/more_screen.dart';
-import './payments/payments_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -27,7 +27,6 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ Safe UI for all devices
       body: SafeArea(
         child: IndexedStack(
           index: currentIndex,
@@ -35,13 +34,12 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
 
-      // ✅ Modern Bottom Navigation
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: (index) {
           setState(() => currentIndex = index);
         },
-        type: BottomNavigationBarType.fixed, // 🔥 important for 4 tabs
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.deepPurple,
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
@@ -57,9 +55,10 @@ class _MainScreenState extends State<MainScreen> {
             label: "Inventory",
           ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.payment_rounded),
-              activeIcon: Icon(Icons.payment),
-              label: "Payments"),
+            icon: Icon(Icons.payment_rounded),
+            activeIcon: Icon(Icons.payment),
+            label: "Payments",
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.shopping_bag_outlined),
             activeIcon: Icon(Icons.shopping_bag),
