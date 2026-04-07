@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../admin/MainScreen.dart';
 import 'LoginScreen.dart';
 import '../../core/widgets/custom_button.dart';
+import '../user/WelcomeScreen.dart'; // New screen for base users
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,7 +17,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController(); // ✅ NEW
+  final TextEditingController phoneController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
   bool isLoading = false;
@@ -24,7 +25,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> register() async {
     String name = nameController.text.trim();
     String email = emailController.text.trim();
-    String phone = phoneController.text.trim(); // ✅ NEW
+    String phone = phoneController.text.trim();
     String password = passwordController.text.trim();
 
     // 🔍 Validation
@@ -61,26 +62,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       String uid = userCredential.user!.uid;
 
-      // 📦 2. Save user in Firestore
+      // 📦 2. Save user in Firestore with default role 'user'
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'userId': uid,
         'name': name,
         'email': email,
-        'phone': "+91$phone", // ✅ country code added
-        'role': 'user',
+        'phone': "+91$phone",
+        'role': 'user', // default role
         'isActive': true,
         'createdAt': Timestamp.now(),
       });
 
-      // 🎉 Success
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Registration Successful")),
       );
 
-      // 🚀 Navigate to Main Screen
+      // 🚀 Navigate based on role
+      // Base users see WelcomeScreen until admin assigns role
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const MainScreen()),
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       );
     } on FirebaseAuthException catch (e) {
       String message = "Registration failed";
@@ -109,7 +110,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     nameController.dispose();
     emailController.dispose();
-    phoneController.dispose(); // ✅ NEW
+    phoneController.dispose();
     passwordController.dispose();
     super.dispose();
   }
@@ -128,16 +129,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-
-              // 🔹 TITLE
               Column(
                 children: const [
                   Icon(Icons.person_add, size: 60, color: Colors.deepPurple),
                   SizedBox(height: 10),
                   Text(
                     "Create Account",
-                    style:
-                        TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     "Register to continue",
@@ -145,10 +143,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 30),
-
-              // 🔹 NAME
+              // Name
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(
@@ -159,10 +155,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 15),
-
-              // 🔹 EMAIL
+              // Email
               TextField(
                 controller: emailController,
                 decoration: InputDecoration(
@@ -173,10 +167,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 15),
-
-              // 🔹 PHONE (NEW)
+              // Phone
               TextField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
@@ -188,10 +180,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 15),
-
-              // 🔹 PASSWORD
+              // Password
               TextField(
                 controller: passwordController,
                 obscureText: true,
@@ -203,10 +193,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 25),
-
-              // 🔹 REGISTER BUTTON
+              // Register Button
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -217,10 +205,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onPressed: register,
                 ),
               ),
-
               const SizedBox(height: 15),
-
-              // 🔹 LOGIN NAVIGATION
+              // Login Navigation
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

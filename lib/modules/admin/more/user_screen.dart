@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -10,14 +11,7 @@ class UsersScreen extends StatefulWidget {
 class _UsersScreenState extends State<UsersScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  List<Map<String, String>> salesmen = [
-    {"name": "Rahul", "phone": "9876543210"},
-  ];
-
-  List<Map<String, String>> distributors = [
-    {"name": "Amit", "phone": "9123456780"},
-  ];
+  String searchQuery = "";
 
   @override
   void initState() {
@@ -25,154 +19,205 @@ class _UsersScreenState extends State<UsersScreen>
     super.initState();
   }
 
-  // 🔹 Add User Dialog
-  void _showAddUserDialog(bool isSalesman) {
-    TextEditingController name = TextEditingController();
-    TextEditingController phone = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isSalesman ? "Add Salesman" : "Add Distributor"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: "Name"),
-            ),
-            TextField(
-              controller: phone,
-              decoration: const InputDecoration(labelText: "Phone"),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                if (isSalesman) {
-                  salesmen.add({
-                    "name": name.text,
-                    "phone": phone.text,
-                  });
-                } else {
-                  distributors.add({
-                    "name": name.text,
-                    "phone": phone.text,
-                  });
-                }
-              });
-              Navigator.pop(context);
-            },
-            child: const Text("Add"),
-          )
-        ],
-      ),
-    );
+  /// 🔍 FILTER USERS
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filter(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> list) {
+    return list.where((doc) {
+      String name = doc.data()['name'] ?? '';
+      String phone = doc.data()['phone'] ?? '';
+      return name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          phone.contains(searchQuery);
+    }).toList();
   }
 
-  // 🔹 Delete
-  void _deleteUser(int index, bool isSalesman) {
-    setState(() {
-      if (isSalesman) {
-        salesmen.removeAt(index);
-      } else {
-        distributors.removeAt(index);
-      }
-    });
+  /// 🗑 DELETE USER
+  Future<void> _deleteUser(String uid) async {
+    await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+  }
+
+  /// ⚙️ CHANGE ROLE
+  Future<void> _changeRole(String uid, String newRole) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .update({'role': newRole});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text("Manage Users"),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: "Salesman"),
-            Tab(text: "Distributor"),
+      body: SafeArea(
+        child: Column(
+          children: [
+            /// 🔥 HEADER WITH BACK BUTTON
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF6A82FB), Color(0xFF4A90E2)],
+                ),
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      /// 🔙 BACK BUTTON
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        "Manage Users",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  /// 🔍 SEARCH BAR
+                  TextField(
+                    onChanged: (val) {
+                      setState(() {
+                        searchQuery = val;
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: "Search user...",
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+
+            /// 🔥 TABS
+            TabBar(
+              controller: _tabController,
+              labelColor: Colors.black,
+              tabs: const [
+                Tab(text: "Salesmen"),
+                Tab(text: "Distributors"),
+              ],
+            ),
+
+            /// 🔥 LIST
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildRoleList("salesman"),
+                  _buildRoleList("distributor"),
+                ],
+              ),
+            ),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildList(salesmen, true),
-          _buildList(distributors, false),
-        ],
       ),
     );
   }
 
-  // 🔹 List UI
-  Widget _buildList(List<Map<String, String>> list, bool isSalesman) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () => _showAddUserDialog(isSalesman),
-              icon: const Icon(Icons.add),
-              label: Text(isSalesman ? "Add Salesman" : "Add Distributor"),
-            ),
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: list.length,
-            itemBuilder: (context, index) {
-              final user = list[index];
+  /// 📋 LIST OF USERS BY ROLE
+  Widget _buildRoleList(String role) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: role)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
+        var users = _filter(snapshot.data!.docs);
+
+        if (users.isEmpty) return const Center(child: Text("No users found"));
+
+        return ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            var user = users[index].data();
+            String uid = users[index].id;
+
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.05),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.deepPurple.withOpacity(0.1),
+                    child: const Icon(Icons.person, color: Colors.deepPurple),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user['name'] ?? '',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 4),
+                        Text(user['phone'] ?? '',
+                            style: const TextStyle(color: Colors.grey)),
+                        Text("Role: ${user['role'] ?? 'user'}",
+                            style: const TextStyle(
+                                color: Colors.black54, fontSize: 12)),
+                      ],
                     ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.deepPurple.withOpacity(0.1),
-                      child: const Icon(Icons.person, color: Colors.deepPurple),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(user["name"]!,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text(user["phone"]!,
-                              style: const TextStyle(color: Colors.grey)),
-                        ],
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == "delete") {
+                        _deleteUser(uid);
+                      } else {
+                        _changeRole(uid, value);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: "salesman",
+                        child: Text("Assign Salesman"),
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => _deleteUser(index, isSalesman),
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                    )
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+                      const PopupMenuItem(
+                        value: "distributor",
+                        child: Text("Assign Distributor"),
+                      ),
+                      const PopupMenuItem(
+                        value: "delete",
+                        child: Text("Delete User",
+                            style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
