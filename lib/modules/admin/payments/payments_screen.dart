@@ -1,344 +1,437 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:typed_data';
-
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-
-import '../../../data/order_data.dart';
+import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle;
 
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
 class PaymentsScreen extends StatelessWidget {
-  const PaymentsScreen({super.key});
+  PaymentsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final orderData = Provider.of<OrderData>(context);
-    final orders = orderData.orders;
-
-    double totalRevenue = 0;
-    double pendingAmount = 0;
-
-    for (var order in orders) {
-      final amount = (order["totalAmount"] ?? 0).toDouble();
-
-      if (order["paymentStatus"] == "Paid") {
-        totalRevenue += amount;
-      } else {
-        pendingAmount += amount;
-      }
-    }
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(title: const Text("Payments")),
-      body: orders.isEmpty
-          ? const Center(child: Text("No Bills Available"))
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      _summaryCard("Revenue", totalRevenue, Colors.green),
-                      const SizedBox(width: 10),
-                      _summaryCard("Pending", pendingAmount, Colors.orange),
-                    ],
-                  ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('payments')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No Payments Found"));
+          }
+
+          final payments = snapshot.data!.docs;
+
+          return ListView.builder(
+            itemCount: payments.length,
+            itemBuilder: (_, index) {
+              final doc = payments[index];
+              final payment = doc.data() as Map<String, dynamic>;
+              final amount = (payment["totalAmount"] ?? payment["amount"] ?? 0).toDouble();
+              final status = payment["status"] ?? "unpaid";
+
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: orders.length,
-                    itemBuilder: (_, index) {
-                      final order = orders[index];
-
-                      final shop = order["shop"];
-                      final amount = (order["totalAmount"] ?? 0).toDouble();
-                      final status = order["paymentStatus"];
-
-                      return Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 6,
-                            )
-                          ],
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: status == "paid"
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.orange.withOpacity(0.1),
+                          child: Icon(
+                            Icons.receipt,
+                            color: status == "paid" ? Colors.green : Colors.orange,
+                          ),
                         ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: status == "Paid"
-                                      ? Colors.green.withValues(alpha: 0.1)
-                                      : Colors.orange.withValues(alpha: 0.1),
-                                  child: Icon(
-                                    Icons.receipt,
-                                    color: status == "Paid"
-                                        ? Colors.green
-                                        : Colors.orange,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(shop,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                      Text(
-                                        "₹${amount.toStringAsFixed(2)}",
-                                        style:
-                                            const TextStyle(color: Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                status == "Paid"
-                                    ? const Chip(
-                                        label: Text("Paid"),
-                                        backgroundColor: Colors.green,
-                                        labelStyle:
-                                            TextStyle(color: Colors.white),
-                                      )
-                                    : ElevatedButton(
-                                        onPressed: () {
-                                          orderData.markPaid(index);
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.orange),
-                                        child: const Text("Mark Paid"),
-                                      ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {
-                                  _showBill(context, order);
-                                },
-                                child: const Text("View Bill"),
-                              ),
-                            )
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-
-  // 🔹 BILL POPUP
-  void _showBill(BuildContext context, Map<String, dynamic> order) {
-    final items = (order["items"] ?? []) as List;
-    final total = (order["totalAmount"] ?? 0).toDouble();
-    final upiId = "yourupi@okaxis";
-
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        child: Container(
-          width: 400,
-          height: 550,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text("KHOSHBOOWALA",
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold)),
-                      const Text("Wholesale & Retail Store"),
-                      const SizedBox(height: 8),
-                      Text("Invoice: ${order["invoiceNo"] ?? "N/A"}"),
-                      Text(
-                          "Date: ${order["date"]?.toString().split(" ")[0] ?? ""}"),
-                      const Divider(),
-                      Text("Customer: ${order["shop"]}",
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
-                      ...items.map<Widget>((item) => Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                  child: Text(
-                                      "${item["product"]} x${item["qty"]}")),
-                              Text("₹${item["total"]}"),
+                              Text(payment["shopName"] ?? "",
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text("₹${amount.toStringAsFixed(2)}"),
                             ],
-                          )),
-                      const Divider(),
-                      Text(
-                        "Total: ₹${total.toStringAsFixed(2)}",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 20),
-                      const Text("Scan & Pay"),
-                      const SizedBox(height: 10),
-                      Center(
-                        child: QrImageView(
-                          data: "upi://pay?pa=$upiId&pn=KHOSHBOOWALA&am=$total",
-                          size: 120,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text("UPI ID: $upiId",
-                          style: const TextStyle(color: Colors.grey)),
-                    ],
-                  ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            status.toUpperCase(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: status == "paid" ? Colors.green : Colors.orange,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _showBill(context, payment),
+                          child: const Text("View Bill"),
+                        ),
+                        if (status != "paid")
+                          ElevatedButton(
+                            onPressed: () => _handlePayment(context, doc.id, payment),
+                            child: const Text("Pay"),
+                          ),
+                      ],
+                    )
+                  ],
                 ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text("Close")),
-                  const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _downloadPDF(order);
-                    },
-                    icon: const Icon(Icons.download),
-                    label: const Text("Download"),
-                  ),
-                ],
-              )
-            ],
-          ),
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  // 🔥 CLEAN PROFESSIONAL PDF
-  Future<void> _downloadPDF(Map<String, dynamic> order) async {
+  void _handlePayment(BuildContext context, String docId, Map<String, dynamic> payment) {
+    String method = "cash";
+    final total = (payment["totalAmount"] ?? 0).toDouble();
+    final upiId = "yourupi@okaxis";
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return SafeArea(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                height: 380,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Select Payment Method",
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text("Cash"),
+                          selected: method == "cash",
+                          onSelected: (_) => setState(() => method = "cash"),
+                        ),
+                        const SizedBox(width: 10),
+                        ChoiceChip(
+                          label: const Text("UPI"),
+                          selected: method == "upi",
+                          onSelected: (_) => setState(() => method = "upi"),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: Center(
+                        child: method == "upi"
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text("Scan & Pay"),
+                                  const SizedBox(height: 10),
+                                  QrImageView(
+                                    data: "upi://pay?pa=$upiId&am=$total",
+                                    size: 140,
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text("Collect Cash"),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    "₹${total.toStringAsFixed(2)}",
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await FirebaseFirestore.instance
+                            .collection('payments')
+                            .doc(docId)
+                            .update({
+                          "status": "paid",
+                          "method": method,
+                          "paidAt": FieldValue.serverTimestamp(),
+                        });
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text("Confirm Payment"),
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showBill(BuildContext context, Map<String, dynamic> payment) async {
+  final orderId = payment["orderId"];
+
+  final orderDoc = await FirebaseFirestore.instance
+      .collection('orders')
+      .doc(orderId)
+      .get();
+
+  final order = orderDoc.data() as Map<String, dynamic>;
+
+  final items = List<Map<String, dynamic>>.from(order["items"] ?? []);
+
+  final shopsDoc = await FirebaseFirestore.instance
+      .collection('shops')
+      .doc(order["shopId"])
+      .get();
+
+  final shops = shopsDoc.data() as Map<String, dynamic>;
+
+  final address = shops["address"] as Map<String, dynamic>?;
+
+  final formattedAddress = address != null
+      ? "${address["street"] ?? ""}, ${address["city"] ?? ""} ${address["pincode"] ?? ""}"
+      : "N/A";
+
+  showDialog(
+    context: context,
+    builder: (_) => Dialog(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+
+            // 🔹 INVOICE HEADER
+            Center(
+              child: Text(
+                "Invoice: ${payment["invoiceNo"] ?? "N/A"}",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // 🔹 SHOP + DATE
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Shop: ${order["shopName"] ?? "N/A"}",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "Date: ${order["date"] != null ? order["date"].toDate().toString().split(" ")[0] : "N/A"}",
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 6),
+
+            // 🔹 OWNER
+            Text(
+              "Owner: ${shops["ownerName"] ?? "N/A"}",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            // 🔹 CONTACT
+            Text(
+              "Contact: ${shops["phone"] ?? "N/A"}",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            // 🔹 ADDRESS
+            Text(
+              "Address: $formattedAddress",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            const Divider(),
+
+            // 🔹 TABLE HEADER
+            Row(
+              children: const [
+                Expanded(child: Text("Item", style: TextStyle(fontWeight: FontWeight.bold))),
+                SizedBox(width: 40),
+                Text("Qty", style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 40),
+                Text("Price", style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 40),
+                Text("Total", style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+
+            const SizedBox(height: 6),
+
+            // 🔹 ITEMS
+            ...items.map((item) => Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text(item["productName"] ?? "")),
+                    const SizedBox(width: 40),
+                    Text("${item["qty"] ?? 0}"),
+                    const SizedBox(width: 40),
+                    Text("₹${item["price"] ?? 0}"),
+                    const SizedBox(width: 40),
+                    Text("₹${item["total"] ?? 0}"),
+                  ],
+                )),
+
+            const Divider(),
+
+            // 🔹 TOTALS
+            Row(
+              children: [
+                const Expanded(
+                    child: Text("Sub-Total",
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                Text("₹${order["subTotal"] ?? 0}"),
+              ],
+            ),
+
+            Row(
+              children: [
+                const Expanded(
+                    child: Text("GST",
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                Text("₹${order["gstAmount"] ?? 0}"),
+              ],
+            ),
+
+            Row(
+              children: [
+                const Expanded(
+                    child: Text("Total",
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                Text(
+                  "₹${order["totalAmount"] ?? 0}",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // 🔹 BUTTONS
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _printPDF(order, payment),
+                    child: const Text("Print"),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final msg =
+                          "Invoice ${payment["invoiceNo"]}\nAmount: ₹${order["totalAmount"]}";
+                      final url =
+                          "https://wa.me/?text=${Uri.encodeComponent(msg)}";
+                      html.window.open(url, "_blank");
+                    },
+                    child: const Text("WhatsApp"),
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+  Future<void> _printPDF(Map<String, dynamic> order, Map<String, dynamic> payment) async {
     final pdf = pw.Document();
+    final items = List<Map<String, dynamic>>.from(order["items"] ?? []);
 
-    final font = await PdfGoogleFonts.notoSansRegular();
-
-    final items = (order["items"] ?? []) as List;
-    final subTotal = (order["subTotal"] ?? 0).toDouble();
-    final gst = (order["gstAmount"] ?? 0).toDouble();
-    final total = (order["totalAmount"] ?? 0).toDouble();
+    // Load a Unicode font (Roboto)
+    final fontData = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+    final ttf = pw.Font.ttf(fontData);
 
     pdf.addPage(
       pw.Page(
-        margin: const pw.EdgeInsets.all(24),
         build: (_) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text("KHOSHBOOWALA",
-                style: pw.TextStyle(
-                    font: font, fontSize: 22, fontWeight: pw.FontWeight.bold)),
-            pw.Text("Wholesale & Retail Store",
-                style: pw.TextStyle(font: font)),
+            pw.Text("Invoice: ${payment["invoiceNo"]}", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold)),
+            pw.Text("Customer: ${order["shopName"]}", style: pw.TextStyle(font: ttf)),
             pw.SizedBox(height: 10),
-            pw.Divider(),
-            pw.Text("Customer: ${order["shop"]}",
-                style:
-                    pw.TextStyle(font: font, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 15),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              color: PdfColors.grey300,
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text("Item", style: pw.TextStyle(font: font)),
-                  pw.Text("Qty", style: pw.TextStyle(font: font)),
-                  pw.Text("Amount", style: pw.TextStyle(font: font)),
-                ],
-              ),
+            // Table headers
+            pw.Row(
+              children: [
+                pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
+                pw.SizedBox(width: 20),
+                pw.Text("Qty", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(width: 20),
+                pw.Text("Price", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(width: 20),
+                pw.Text("Total", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold)),
+              ],
             ),
-            ...items.map((item) => pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 6),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(item["product"], style: pw.TextStyle(font: font)),
-                      pw.Text("${item["qty"]}",
-                          style: pw.TextStyle(font: font)),
-                      pw.Text("₹${item["total"]}",
-                          style: pw.TextStyle(font: font)),
-                    ],
-                  ),
+            pw.SizedBox(height: 6),
+            ...items.map((item) => pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Expanded(child: pw.Text(item["productName"], style: pw.TextStyle(font: ttf))),
+                    pw.Text("${item["qty"]}", style: pw.TextStyle(font: ttf)),
+                    pw.Text("₹${item["price"]}", style: pw.TextStyle(font: ttf)),
+                    pw.Text("₹${item["total"]}", style: pw.TextStyle(font: ttf)),
+                  ],
                 )),
             pw.Divider(),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text("Subtotal: ₹$subTotal",
-                      style: pw.TextStyle(font: font)),
-                  pw.Text("GST: ₹$gst", style: pw.TextStyle(font: font)),
-                  pw.Text("Total: ₹$total",
-                      style: pw.TextStyle(
-                          font: font, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-            ),
+            pw.Text("Subtotal: ₹${order["subTotal"]}", style: pw.TextStyle(font: ttf)),
+            pw.Text("GST: ₹${order["gstAmount"]}", style: pw.TextStyle(font: ttf)),
+            pw.Text("Total: ₹${order["totalAmount"]}", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold)),
           ],
         ),
       ),
     );
 
     final bytes = await pdf.save();
-
     if (kIsWeb) {
       final blob = html.Blob([bytes]);
       final url = html.Url.createObjectUrlFromBlob(blob);
-
-      html.AnchorElement(href: url)
-        ..setAttribute("download", "invoice.pdf")
-        ..click();
-
-      html.Url.revokeObjectUrl(url);
+      html.window.open(url, "_blank");
     } else {
       await Printing.layoutPdf(onLayout: (_) async => bytes);
     }
-  }
-
-  Widget _summaryCard(String title, double amount, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Text("₹${amount.toStringAsFixed(2)}",
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
-      ),
-    );
   }
 }

@@ -63,15 +63,44 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  // 🔹 PACK ORDER
-  Future<void> _packOrder(String orderId) async {
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(orderId)
-        .update({
+  // 🔥 PACK ORDER (FIXED)
+  Future<void> _packOrder(String orderId, Map<String, dynamic> order) async {
+  try {
+    final db = FirebaseFirestore.instance;
+
+    // 🔹 Generate invoice
+    final snapshot = await db.collection('payments').get();
+    int count = snapshot.docs.length + 1;
+    String invoiceNo = "INV-${count.toString().padLeft(3, '0')}";
+
+    // 🔹 Update order
+    await db.collection('orders').doc(orderId).update({
       "status": "packed",
     });
+
+    // 🔹 Create payment
+    await db.collection('payments').add({
+      "orderId": orderId,
+      "shopId": order["shopId"],
+      "shopName": order["shopName"],
+      "totalAmount": order["totalAmount"],
+      "subTotal": order["subTotal"],
+      "gstAmount": order["gstAmount"],
+      "gstPercent": order["gstPercent"],
+      "items": order["items"],
+      "status": "unpaid",
+      "invoiceNo": invoiceNo,
+      "createdAt": FieldValue.serverTimestamp(),
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Packed • Invoice $invoiceNo created")),
+    );
+
+  } catch (e) {
+    print("Error: $e");
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -131,9 +160,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
 
-                    // 🏪 SHOP (still ID for now)
+                    // 🏪 SHOP
                     Text(
-                      "Shop: ${order["shopName"]}",
+                      "Shop: ${order["shopName"] ?? ""}",
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
@@ -154,15 +183,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                 "${item["productName"]} x${item["qty"]}",
                               ),
                             ),
-                            Text(
-                              "₹${item["price"]}",
-                              style: const TextStyle(color: Colors.grey),
-                            ),
+                            Text("₹${item["price"]}"),
                             const SizedBox(width: 10),
                             Text(
                               "₹${item["total"]}",
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold),
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
@@ -171,13 +196,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
                     const Divider(height: 20),
 
-                    // 💰 BILL DETAILS
+                    // 💰 BILL
                     _billRow("Subtotal", subTotal),
-                    _billRow(
-                      "GST (${gstPercent.toStringAsFixed(0)}%)",
-                      gstAmount,
-                    ),
-                    const SizedBox(height: 5),
+                    _billRow("GST (${gstPercent.toStringAsFixed(0)}%)", gstAmount),
                     _billRow("Total", total, isBold: true),
 
                     const SizedBox(height: 10),
@@ -198,7 +219,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         ),
                         if (status == "pending")
                           ElevatedButton(
-                            onPressed: () => _packOrder(doc.id),
+                            onPressed: () => _packOrder(doc.id, order), // ✅ FIXED
                             child: const Text("Pack"),
                           ),
                       ],
@@ -218,18 +239,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-        Text(
-          "₹${amount.toStringAsFixed(2)}",
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+        Text("₹${amount.toStringAsFixed(2)}",
+            style: TextStyle(
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
       ],
     );
   }

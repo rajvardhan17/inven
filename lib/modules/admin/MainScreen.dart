@@ -16,7 +16,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int currentIndex = 0;
 
-  final List<Widget> screens = const [
+  final List<Widget> screens =[
     AdminHome(),
     InventoryScreen(),
     PaymentsScreen(),
