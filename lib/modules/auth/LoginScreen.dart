@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../admin/MainScreen.dart';
 import 'RegisterScreen.dart';
+import 'SplashScreen.dart'; // 🔥 IMPORTANT
 import '../../core/widgets/custom_button.dart';
 import '../../core/widgets/custom_textfield.dart';
 
@@ -20,83 +20,95 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool isLoading = false;
 
-  void login() async {
-  String email = emailController.text.trim();
-  String password = passwordController.text.trim();
+  Future<void> login() async {
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
 
-  if (email.isEmpty || password.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please fill all fields")),
-    );
-    return;
-  }
-
-  setState(() => isLoading = true);
-
-  try {
-    // 🔐 Firebase Login
-    UserCredential userCredential =
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
-    // ✅ STOP if widget destroyed
-    if (!mounted) return;
-
-    String uid = userCredential.user!.uid;
-
-    // 📦 Get user data
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
-
-    if (!mounted) return;
-
-    if (!userDoc.exists) {
-      throw "User data not found";
+    // 🔍 Validation
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all fields")),
+      );
+      return;
     }
 
-    var data = userDoc.data() as Map<String, dynamic>;
+    setState(() => isLoading = true);
 
-    if (data['isActive'] == false) {
-      throw "Account disabled";
+    try {
+      // 🔐 Firebase Login
+      UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      String uid = userCredential.user!.uid;
+
+      // 📦 Fetch user data
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (!mounted) return;
+
+      if (!userDoc.exists) {
+        throw "User data not found";
+      }
+
+      var data = userDoc.data() as Map<String, dynamic>;
+
+      // 🚫 Block inactive users
+      if (data['isActive'] == false) {
+        throw "Account disabled. Contact admin.";
+      }
+
+      // ✅ SUCCESS → Go to Splash (Router)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => SplashScreen()),
+      );
+
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      String message = "Login failed";
+
+      switch (e.code) {
+        case 'user-not-found':
+          message = "No user found";
+          break;
+        case 'wrong-password':
+          message = "Incorrect password";
+          break;
+        case 'invalid-email':
+          message = "Invalid email";
+          break;
+        case 'too-many-requests':
+          message = "Too many attempts. Try later.";
+          break;
+        default:
+          message = e.message ?? "Login error";
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
 
-    // ❗ IMPORTANT:
-    // 🚫 DO NOT NAVIGATE HERE
-    // AuthWrapper will automatically move to MainScreen
-
-  } on FirebaseAuthException catch (e) {
-    if (!mounted) return;
-
-    String message = "Login failed";
-
-    if (e.code == 'user-not-found') {
-      message = "No user found";
-    } else if (e.code == 'wrong-password') {
-      message = "Incorrect password";
-    } else if (e.code == 'invalid-email') {
-      message = "Invalid email";
+    if (mounted) {
+      setState(() => isLoading = false);
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
   }
-
-  if (mounted) {
-    setState(() => isLoading = false);
-  }
-}
 
   @override
   void dispose() {
