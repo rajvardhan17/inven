@@ -1,90 +1,156 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ProductionScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> rawMaterials;
-  final List<Map<String, dynamic>> products;
-  final Map<String, Map<String, double>> recipe;
-
-  const ProductionScreen({
-    super.key,
-    required this.rawMaterials,
-    required this.products,
-    required this.recipe,
-  });
+  const ProductionScreen({super.key});
 
   @override
   State<ProductionScreen> createState() => _ProductionScreenState();
 }
 
 class _ProductionScreenState extends State<ProductionScreen> {
-  String? selectedProduct;
-  TextEditingController qtyController = TextEditingController();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // 🔥 PRODUCTION LOGIC
-  void produce() {
-    if (selectedProduct == null || qtyController.text.isEmpty) return;
+  String? selectedProductId;
+  final qtyController = TextEditingController();
 
-    int qty = int.parse(qtyController.text);
-    final productRecipe = widget.recipe[selectedProduct];
+  bool isLoading = false;
 
-    if (productRecipe == null) return;
+  // 🔹 PRODUCTION LOGIC (TRANSACTION SAFE)
+  Future<void> produce() async {
+    if (selectedProductId == null || qtyController.text.isEmpty) return;
 
-    // ✅ Check raw material availability
-    for (var item in productRecipe.entries) {
-      final raw = widget.rawMaterials.firstWhere(
-        (e) => e["name"] == item.key,
+    int qty = int.tryParse(qtyController.text) ?? 0;
+    if (qty <= 0) return;
+
+    setState(() => isLoading = true);
+
+    try {
+      await _db.runTransaction((transaction) async {
+
+        // 🔹 Get product
+        final productRef = _db.collection('products').doc(selectedProductId);
+        final productSnap = await transaction.get(productRef);
+
+        if (!productSnap.exists) throw Exception("Product not found");
+
+        final productData = productSnap.data()!;
+        final recipe = Map<String, dynamic>.from(productData["recipe"] ?? {});
+
+        if (recipe.isEmpty) throw Exception("Recipe not defined");
+
+        // 🔹 Check raw materials
+        for (var entry in recipe.entries) {
+          final rawQuery = await _db
+              .collection('raw_materials')
+              .where('name', isEqualTo: entry.key)
+              .limit(1)
+              .get();
+
+          if (rawQuery.docs.isEmpty) {
+            throw Exception("${entry.key} not found");
+          }
+
+          final rawDoc = rawQuery.docs.first;
+          final rawData = rawDoc.data();
+
+          double available = (rawData["qty"] ?? 0).toDouble();
+          double required = (entry.value as num).toDouble() * qty;
+
+          if (available < required) {
+            throw Exception("Not enough ${entry.key}");
+          }
+        }
+
+        // 🔹 Deduct raw materials
+        for (var entry in recipe.entries) {
+          final rawQuery = await _db
+              .collection('raw_materials')
+              .where('name', isEqualTo: entry.key)
+              .limit(1)
+              .get();
+
+          final rawDoc = rawQuery.docs.first;
+
+          double required = (entry.value as num).toDouble() * qty;
+
+          transaction.update(rawDoc.reference, {
+            "qty": FieldValue.increment(-required),
+          });
+        }
+
+        // 🔹 Add product stock
+        transaction.update(productRef, {
+          "qty": FieldValue.increment(qty),
+        });
+
+        // 🔹 LOG PRODUCTION (VERY IMPORTANT 🔥)
+        await _db.collection('production_logs').add({
+          "productId": selectedProductId,
+          "qty": qty,
+          "createdAt": FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Production Successful ✅")),
       );
 
-      double required = item.value * qty;
+      Navigator.pop(context, true);
 
-      if (raw["qty"] < required) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Not enough ${item.key}")),
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  // 🔹 PRODUCTS DROPDOWN (LIVE)
+  Widget _productDropdown() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _db.collection('products').snapshots(),
+      builder: (context, snapshot) {
+
+        if (!snapshot.hasData) {
+          return const CircularProgressIndicator();
+        }
+
+        final products = snapshot.data!.docs;
+
+        return DropdownButtonFormField<String>(
+          decoration: const InputDecoration(
+            labelText: "Select Product",
+            border: OutlineInputBorder(),
+          ),
+          value: selectedProductId,
+          items: products.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return DropdownMenuItem(
+              value: doc.id,
+              child: Text(data["name"] ?? "No Name"),
+            );
+          }).toList(),
+          onChanged: (val) => setState(() => selectedProductId = val),
         );
-        return;
-      }
-    }
-
-    // ✅ Deduct raw
-    for (var item in productRecipe.entries) {
-      final raw = widget.rawMaterials.firstWhere(
-        (e) => e["name"] == item.key,
-      );
-      raw["qty"] -= item.value * qty;
-    }
-
-    // ✅ Add product
-    final productIndex =
-        widget.products.indexWhere((p) => p["name"] == selectedProduct);
-
-    if (productIndex != -1) {
-      widget.products[productIndex]["qty"] += qty;
-    }
-
-    // 🔥 IMPORTANT: notify inventory UI
-    // (only if using notifier)
-    // InventoryData.productsNotifier.notifyListeners();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Production Successful ✅")),
+      },
     );
-
-    // 🔥 GO BACK + SIGNAL SUCCESS
-    Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text("Production"),
-      ),
+      appBar: AppBar(title: const Text("Production")),
+
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // 🔹 Card Container
+
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -99,30 +165,11 @@ class _ProductionScreenState extends State<ProductionScreen> {
               ),
               child: Column(
                 children: [
-                  // 🔹 Dropdown
-                  DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: "Select Product",
-                      border: OutlineInputBorder(),
-                    ),
-                    value: selectedProduct,
-                    items: widget.products
-                        .map<DropdownMenuItem<String>>(
-                            (p) => DropdownMenuItem<String>(
-                                  value: p["name"] as String,
-                                  child: Text(p["name"]),
-                                ))
-                        .toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        selectedProduct = val;
-                      });
-                    },
-                  ),
+
+                  _productDropdown(),
 
                   const SizedBox(height: 16),
 
-                  // 🔹 Quantity Input
                   TextField(
                     controller: qtyController,
                     keyboardType: TextInputType.number,
@@ -134,15 +181,13 @@ class _ProductionScreenState extends State<ProductionScreen> {
 
                   const SizedBox(height: 20),
 
-                  // 🔹 Produce Button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: produce,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text("Produce"),
+                      onPressed: isLoading ? null : produce,
+                      child: isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("Produce"),
                     ),
                   ),
                 ],

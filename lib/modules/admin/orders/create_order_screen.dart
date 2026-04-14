@@ -18,13 +18,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   String? selectedShopId;
   String? selectedProductId;
 
-  final qtyController = TextEditingController(text: "0");
+  final qtyController = TextEditingController(text: "1");
   final priceController = TextEditingController();
   final gstController = TextEditingController(text: "18");
 
   List<Map<String, dynamic>> orderItems = [];
 
-  // ✅ FIXED product finder
   Map<String, dynamic>? get selectedProduct {
     try {
       return widget.products.firstWhere(
@@ -47,17 +46,23 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   // ➕ ADD ITEM
   void addItem() {
-    if (selectedProduct == null) return;
+    if (selectedProduct == null) {
+      _showError("Select a product");
+      return;
+    }
 
     int qty = int.tryParse(qtyController.text) ?? 0;
     double price = double.tryParse(priceController.text) ?? 0;
 
-    if (qty <= 0 || price <= 0) return;
+    if (qty <= 0 || price <= 0) {
+      _showError("Enter valid quantity & price");
+      return;
+    }
 
     setState(() {
       orderItems.add({
         "productId": selectedProductId,
-        "productName": selectedProduct!["name"].toString(),
+        "productName": selectedProduct!["name"],
         "qty": qty,
         "price": price,
         "total": qty * price,
@@ -67,26 +72,45 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     });
   }
 
+  // ❌ REMOVE ITEM
+  void removeItem(int index) {
+    setState(() => orderItems.removeAt(index));
+  }
+
   // 🚀 PLACE ORDER
   void placeOrder() {
-  if (selectedShopId == null || orderItems.isEmpty) return;
+    if (selectedShopId == null) {
+      _showError("Select a shop");
+      return;
+    }
 
-  final selectedShop = widget.shops.firstWhere(
-    (s) => s["id"].toString() == selectedShopId,
-  );
+    if (orderItems.isEmpty) {
+      _showError("Add at least one item");
+      return;
+    }
 
-  Navigator.pop(context, {
-    "shopId": selectedShopId,
-    "shopName": selectedShop["shopName"], // ✅ ADD THIS
-    "items": orderItems,
-    "subTotal": subTotal,
-    "gstPercent": gstPercent,
-    "gstAmount": gstAmount,
-    "totalAmount": grandTotal,
-    "status": "pending",
-    "date": DateTime.now(),
-  });
-}
+    final selectedShop = widget.shops.firstWhere(
+      (s) => s["id"].toString() == selectedShopId,
+    );
+
+    Navigator.pop(context, {
+      "shopId": selectedShopId,
+      "shopName": selectedShop["shopName"],
+      "items": orderItems,
+      "subTotal": subTotal,
+      "gstPercent": gstPercent,
+      "gstAmount": gstAmount,
+      "totalAmount": grandTotal,
+      "status": "pending",
+      "createdAt": DateTime.now(),
+    });
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,136 +123,153 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           children: [
 
             // 🏪 SHOP
-            DropdownButtonFormField<String>(
-              hint: const Text("Select Shop"),
-              value: selectedShopId,
-              items: widget.shops.map<DropdownMenuItem<String>>((s) {
-                return DropdownMenuItem<String>(
-                  value: s["id"].toString(),
-                  child: Text(s["shopName"] ?? "No Name"),
-                );
-              }).toList(),
-              onChanged: (val) => setState(() => selectedShopId = val),
-            ),
-
-            const SizedBox(height: 16),
-
-            // 📦 PRODUCT
-            DropdownButtonFormField<String>(
-              hint: const Text("Select Product"),
-              value: selectedProductId,
-              items: widget.products.map<DropdownMenuItem<String>>((p) {
-                return DropdownMenuItem<String>(
-                  value: p["id"].toString(),
-                  child: Text(p["name"] ?? "No Name"),
-                );
-              }).toList(),
-              onChanged: (val) {
-                setState(() {
-                  selectedProductId = val;
-                  final product = selectedProduct;
-                  if (product != null) {
-                    priceController.text = product["price"].toString();
-                  }
-                });
-              },
-            ),
-
-            const SizedBox(height: 16),
-
-            // 🔢 QTY + PRICE
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Quantity",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: priceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Price (₹)",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // 💸 GST
-            TextField(
-              controller: gstController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: "GST (%)",
-                border: OutlineInputBorder(),
+            _card(
+              DropdownButtonFormField<String>(
+                hint: const Text("Select Shop"),
+                value: selectedShopId,
+                items: widget.shops.map((s) {
+                  return DropdownMenuItem(
+                    value: s["id"].toString(),
+                    child: Text(s["shopName"] ?? "No Name"),
+                  );
+                }).toList(),
+                onChanged: (val) => setState(() => selectedShopId = val),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // ➕ ADD ITEM
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: addItem,
-                child: const Text("Add Item"),
+            // 📦 PRODUCT
+            _card(
+              Column(
+                children: [
+                  DropdownButtonFormField<String>(
+                    hint: const Text("Select Product"),
+                    value: selectedProductId,
+                    items: widget.products.map((p) {
+                      return DropdownMenuItem(
+                        value: p["id"].toString(),
+                        child: Text(p["name"] ?? "No Name"),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        selectedProductId = val;
+                        final product = selectedProduct;
+                        if (product != null) {
+                          priceController.text =
+                              product["price"].toString();
+                        }
+                      });
+                    },
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: qtyController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: "Qty",
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: priceController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: "Price",
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  TextField(
+                    controller: gstController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: "GST %",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: addItem,
+                      child: const Text("Add Item"),
+                    ),
+                  ),
+                ],
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // 📋 ITEMS LIST
-            orderItems.isEmpty
-                ? const Text("No items added")
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: orderItems.length,
-                    itemBuilder: (_, i) {
-                      final item = orderItems[i];
-                      return ListTile(
-                        title: Text(item["productName"]),
-                        subtitle:
-                            Text("₹${item["price"]} x ${item["qty"]}"),
-                        trailing: Text(
-                          "₹${item["total"].toStringAsFixed(2)}",
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold),
-                        ),
-                      );
-                    },
-                  ),
+            // 📋 ITEMS
+            _card(
+              orderItems.isEmpty
+                  ? const Center(child: Text("No items added"))
+                  : Column(
+                      children: List.generate(orderItems.length, (i) {
+                        final item = orderItems[i];
+
+                        return ListTile(
+                          title: Text(item["productName"]),
+                          subtitle:
+                              Text("₹${item["price"]} x ${item["qty"]}"),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                "₹${item["total"].toStringAsFixed(2)}",
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => removeItem(i),
+                              )
+                            ],
+                          ),
+                        );
+                      }),
+                    ),
+            ),
 
             const SizedBox(height: 20),
 
             // 💰 TOTALS
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text("Subtotal: ₹${subTotal.toStringAsFixed(2)}"),
-                Text(
-                    "GST (${gstPercent.toStringAsFixed(0)}%): ₹${gstAmount.toStringAsFixed(2)}"),
-                const SizedBox(height: 5),
-                Text(
-                  "Total: ₹${grandTotal.toStringAsFixed(2)}",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                    fontSize: 16,
+            _card(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text("Subtotal: ₹${subTotal.toStringAsFixed(2)}"),
+                  Text(
+                      "GST (${gstPercent.toStringAsFixed(0)}%): ₹${gstAmount.toStringAsFixed(2)}"),
+                  const Divider(),
+                  Text(
+                    "Total: ₹${grandTotal.toStringAsFixed(2)}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.green,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
 
             const SizedBox(height: 20),
@@ -244,6 +285,21 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // 🔹 COMMON CARD UI
+  Widget _card(Widget child) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
+        ],
+      ),
+      child: child,
     );
   }
 }
