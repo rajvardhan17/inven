@@ -16,8 +16,6 @@ class TokenRefreshService {
   Timer? _timer;
   bool   _isRunning = false;
 
-  // ── Public API ──────────────────────────────────────────────────────────────
-
   void start() {
     if (_isRunning) return;
     _isRunning = true;
@@ -35,8 +33,6 @@ class TokenRefreshService {
   Future<String?> getFreshToken() async {
     return _refresh(forceRefresh: true);
   }
-
-  // ── Internal ────────────────────────────────────────────────────────────────
 
   void _scheduleRefresh() {
     _timer?.cancel();

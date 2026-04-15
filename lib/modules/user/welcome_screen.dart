@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/session/session_manager.dart';
 
-/// Shown once after successful registration.
-/// Auto-navigates to the correct role screen via AuthWrapper
-/// after the user taps "Get Started".
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
@@ -20,8 +17,6 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(flex: 2),
-
-              // ── Illustration ──────────────────────────────────────────────
               Container(
                 width: 120,
                 height: 120,
@@ -32,10 +27,7 @@ class WelcomeScreen extends StatelessWidget {
                 child: const Icon(Icons.check_rounded,
                     size: 64, color: Colors.white),
               ),
-
               const SizedBox(height: 32),
-
-              // ── Welcome text ──────────────────────────────────────────────
               Text(
                 'Welcome,\n${session?.name ?? 'there'}!',
                 textAlign: TextAlign.center,
@@ -46,9 +38,7 @@ class WelcomeScreen extends StatelessWidget {
                   height: 1.3,
                 ),
               ),
-
               const SizedBox(height: 16),
-
               const Text(
                 'Your account has been created successfully.\nYou\'re all set to get started.',
                 textAlign: TextAlign.center,
@@ -58,17 +48,14 @@ class WelcomeScreen extends StatelessWidget {
                   height: 1.6,
                 ),
               ),
-
               const Spacer(flex: 2),
-
-              // ── CTA ───────────────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Pop back to AuthWrapper — it routes by role automatically.
-                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    Navigator.of(context)
+                        .popUntil((route) => route.isFirst);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
@@ -84,7 +71,6 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 40),
             ],
           ),

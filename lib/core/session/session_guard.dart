@@ -4,14 +4,6 @@ import 'session_manager.dart';
 import 'session_model.dart';
 import '../../modules/auth/login_screen.dart';
 
-/// Wrap any screen to enforce authentication + optional RBAC.
-///
-/// ```dart
-/// SessionGuard(
-///   requiredRole: UserRole.admin,
-///   child: const AdminDashboard(),
-/// )
-/// ```
 class SessionGuard extends StatelessWidget {
   final Widget child;
   final UserRole? requiredRole;
@@ -28,7 +20,6 @@ class SessionGuard extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<SessionModel?>(
       stream: SessionManager.instance.sessionStream,
-      initialData: SessionManager.instance.currentSession,
       builder: (context, snapshot) {
         final session = snapshot.data;
 
@@ -58,7 +49,8 @@ class _UnauthorizedScreen extends StatelessWidget {
             const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             const Text('Access Denied',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text(
               'Your role (${role.name}) cannot access this page.',

@@ -66,6 +66,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         await db.collection('orders').add({
           ...result,
           "status": "pending",
+          "paymentStatus": "unpaid", // ✅ ADD THIS
           "createdAt": FieldValue.serverTimestamp(),
         });
       }
@@ -78,19 +79,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Future<void> _packOrder(
     String orderId,
     Map<String, dynamic> order,
-  ) async {
+    ) async {
     try {
-      final paymentsRef = db.collection('payments');
-
       final invoiceNo =
           "INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
 
       await db.runTransaction((txn) async {
-        txn.update(db.collection('orders').doc(orderId), {
+        final orderRef = db.collection('orders').doc(orderId);
+        final paymentRef = db.collection('payments').doc();
+
+        // ✅ UPDATE ORDER
+        txn.update(orderRef, {
           "status": "packed",
+          "paymentStatus": "unpaid", // ensure exists
         });
 
-        txn.set(paymentsRef.doc(), {
+        // ✅ CREATE PAYMENT
+        txn.set(paymentRef, {
           "orderId": orderId,
           "shopId": order["shopId"],
           "shopName": order["shopName"],
@@ -99,6 +104,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           "gstAmount": order["gstAmount"],
           "gstPercent": order["gstPercent"],
           "items": order["items"],
+
           "status": "unpaid",
           "invoiceNo": invoiceNo,
           "createdAt": FieldValue.serverTimestamp(),

@@ -19,20 +19,18 @@ class SessionManager {
   SessionModel? get currentSession => _session;
   bool get isLoggedIn => _session != null && _session!.isActive;
 
-  // ✅ Use a BehaviorSubject-like pattern with a seeded value.
-  // StreamController.broadcast() loses events for late subscribers.
-  // Instead we keep _lastEmitted and replay it to new subscribers.
-  final _sessionController = StreamController<SessionModel?>.broadcast();
   bool _hasEmitted = false;
+  final _sessionController = StreamController<SessionModel?>.broadcast();
 
+  // ✅ Replays last value to every new subscriber — fixes stuck splash.
   Stream<SessionModel?> get sessionStream async* {
-    // ✅ Replay the last known value to any new subscriber immediately.
     if (_hasEmitted) yield _session;
     yield* _sessionController.stream;
   }
 
   StreamSubscription<User?>?            _authSub;
   StreamSubscription<DocumentSnapshot>? _profileSub;
+  StreamSubscription<QuerySnapshot>?    _profileQuerySub;
 
   // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -44,22 +42,47 @@ class SessionManager {
   // ── Auth state ──────────────────────────────────────────────────────────────
 
   Future<void> _onAuthStateChanged(User? user) async {
-    _profileSub?.cancel();
-    _profileSub = null;
+    _cancelProfileSubs();
 
     if (user == null) {
       _clearSession();
       return;
     }
 
-    _profileSub = _firestore
+    // Check if doc exists at uid path (correct structure).
+    final directDoc = await _firestore
         .collection('users')
         .doc(user.uid)
-        .snapshots()
-        .listen(
-          (snap) => _onProfileSnapshot(user.uid, snap),
-          onError: (_) => _clearSession(),
-        );
+        .get();
+
+    if (directDoc.exists) {
+      // ✅ Correct path — listen by uid.
+      _profileSub = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .snapshots()
+          .listen(
+            (snap) => _onProfileSnapshot(user.uid, snap),
+            onError: (_) => _clearSession(),
+          );
+    } else {
+      // ✅ Legacy path — doc saved with auto-generated ID, query by email.
+      _profileQuerySub = _firestore
+          .collection('users')
+          .where('email', isEqualTo: user.email)
+          .limit(1)
+          .snapshots()
+          .listen(
+            (snap) {
+              if (snap.docs.isEmpty) {
+                signOut();
+                return;
+              }
+              _onProfileSnapshot(snap.docs.first.id, snap.docs.first);
+            },
+            onError: (_) => _clearSession(),
+          );
+    }
   }
 
   void _onProfileSnapshot(String uid, DocumentSnapshot snap) {
@@ -82,19 +105,52 @@ class SessionManager {
         name: 'SessionManager');
   }
 
-  // ── Load session ─────────────────────────────────────────────────────────
+  // ── Load session (called after login / register) ──────────────────────────
 
   Future<SessionModel> loadSession(String uid) async {
     try {
-      final doc = await _firestore.collection('users').doc(uid).get();
+      // Try uid path first.
+      var doc = await _firestore.collection('users').doc(uid).get();
 
+      // ✅ Fallback: query by email for legacy auto-generated doc IDs.
       if (!doc.exists) {
-        throw const SessionException(
-          'User profile not found.',
-          reason: SessionFailureReason.userNotFound,
-        );
+        final user = _auth.currentUser;
+        if (user == null) {
+          throw const SessionException(
+            'Not authenticated.',
+            reason: SessionFailureReason.userNotFound,
+          );
+        }
+
+        final query = await _firestore
+            .collection('users')
+            .where('email', isEqualTo: user.email)
+            .limit(1)
+            .get();
+
+        if (query.docs.isEmpty) {
+          throw const SessionException(
+            'User profile not found.',
+            reason: SessionFailureReason.userNotFound,
+          );
+        }
+
+        final data    = query.docs.first.data();
+        final session = SessionModel.fromFirestore(query.docs.first.id, data);
+
+        if (!session.isActive) {
+          throw const SessionException(
+            'Account is disabled. Contact admin.',
+            reason: SessionFailureReason.accountDisabled,
+          );
+        }
+
+        _session = session;
+        _emit(_session);
+        return session;
       }
 
+      // Normal path.
       final session = SessionModel.fromFirestore(uid, doc.data()!);
 
       if (!session.isActive) {
@@ -107,6 +163,7 @@ class SessionManager {
       _session = session;
       _emit(_session);
       return session;
+
     } on SessionException {
       rethrow;
     } catch (e) {
@@ -123,8 +180,7 @@ class SessionManager {
 
   Future<void> signOut({SessionFailureReason? reason}) async {
     TokenRefreshService.instance.stop();
-    _profileSub?.cancel();
-    _profileSub = null;
+    _cancelProfileSubs();
     _clearSession();
     await _auth.signOut();
     log('[SessionManager] Signed out. Reason: $reason',
@@ -145,11 +201,18 @@ class SessionManager {
     }
   }
 
+  void _cancelProfileSubs() {
+    _profileSub?.cancel();
+    _profileSub = null;
+    _profileQuerySub?.cancel();
+    _profileQuerySub = null;
+  }
+
   // ── Dispose ──────────────────────────────────────────────────────────────────
 
   void dispose() {
     _authSub?.cancel();
-    _profileSub?.cancel();
+    _cancelProfileSubs();
     _sessionController.close();
   }
 }

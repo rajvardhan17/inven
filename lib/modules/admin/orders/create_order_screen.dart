@@ -46,31 +46,31 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   // ➕ ADD ITEM
   void addItem() {
-    if (selectedProduct == null) {
-      _showError("Select a product");
-      return;
-    }
-
-    int qty = int.tryParse(qtyController.text) ?? 0;
-    double price = double.tryParse(priceController.text) ?? 0;
-
-    if (qty <= 0 || price <= 0) {
-      _showError("Enter valid quantity & price");
-      return;
-    }
-
-    setState(() {
-      orderItems.add({
-        "productId": selectedProductId,
-        "productName": selectedProduct!["name"],
-        "qty": qty,
-        "price": price,
-        "total": qty * price,
-      });
-
-      qtyController.text = "1";
-    });
+  if (selectedProduct == null) {
+    _showError("Select a product");
+    return;
   }
+
+  int qty = int.tryParse(qtyController.text) ?? 0;
+  double price = double.tryParse(priceController.text) ?? 0;
+
+  if (qty <= 0 || price <= 0) {
+    _showError("Enter valid quantity & price");
+    return;
+  }
+
+  setState(() {
+    orderItems.add({
+      "productId": selectedProductId,
+      "productName": selectedProduct!["name"] ?? "Item",
+      "qty": qty,
+      "price": price,
+      "total": qty * price,
+    });
+
+    qtyController.text = "1";
+  });
+}
 
   // ❌ REMOVE ITEM
   void removeItem(int index) {
@@ -79,32 +79,39 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   // 🚀 PLACE ORDER
   void placeOrder() {
-    if (selectedShopId == null) {
-      _showError("Select a shop");
-      return;
-    }
-
-    if (orderItems.isEmpty) {
-      _showError("Add at least one item");
-      return;
-    }
-
-    final selectedShop = widget.shops.firstWhere(
-      (s) => s["id"].toString() == selectedShopId,
-    );
-
-    Navigator.pop(context, {
-      "shopId": selectedShopId,
-      "shopName": selectedShop["shopName"],
-      "items": orderItems,
-      "subTotal": subTotal,
-      "gstPercent": gstPercent,
-      "gstAmount": gstAmount,
-      "totalAmount": grandTotal,
-      "status": "pending",
-      "createdAt": DateTime.now(),
-    });
+  if (selectedShopId == null) {
+    _showError("Select a shop");
+    return;
   }
+
+  if (orderItems.isEmpty) {
+    _showError("Add at least one item");
+    return;
+  }
+
+  final selectedShop = widget.shops.firstWhere(
+    (s) => s["id"].toString() == selectedShopId,
+  );
+
+  Navigator.pop(context, {
+    "shopId": selectedShopId,
+    "shopName": selectedShop["shopName"] ?? selectedShop["name"] ?? "Unknown",
+
+    // ✅ ALWAYS LIST
+    "items": orderItems,
+
+    "subTotal": subTotal,
+    "gstPercent": gstPercent,
+    "gstAmount": gstAmount,
+    "totalAmount": grandTotal,
+
+    // ✅ FIXED STATUS FLOW
+    "status": "pending",
+    "paymentStatus": "unpaid",
+
+    "createdAt": DateTime.now(),
+  });
+}
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'core/session/session_manager.dart';
 import 'core/session/session_model.dart';
 import 'core/services/token_refresh_service.dart';
+import 'core/theme_provider.dart'; // ✅ ADDED
 import 'data/order_data.dart';
 import 'firebase_options.dart';
 import 'modules/admin/main_screen.dart';
@@ -27,6 +28,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => OrderData()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()), // ✅ ADDED
       ],
       child: const MyApp(),
     ),
@@ -38,40 +40,91 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'BizAdmin',
-      theme: _buildTheme(),
-      home: const AuthWrapper(),
+    return Consumer<ThemeProvider>( // ✅ WRAPPED
+      builder: (context, themeProvider, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'BizAdmin',
+
+          // ✅ DARK MODE SUPPORT
+          themeMode:
+              themeProvider.isDark ? ThemeMode.dark : ThemeMode.light,
+
+          theme: _buildTheme(isDark: false),
+          darkTheme: _buildTheme(isDark: true),
+
+          home: const AuthWrapper(),
+        );
+      },
     );
   }
 
-  ThemeData _buildTheme() {
-    return ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+  // 🔥 UI UPGRADE (ENTERPRISE LOOK)
+  ThemeData _buildTheme({required bool isDark}) {
+    final base = isDark ? ThemeData.dark() : ThemeData.light();
+
+    return base.copyWith(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.deepPurple,
+        brightness: isDark ? Brightness.dark : Brightness.light,
+      ),
+
       useMaterial3: true,
+
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F6FB),
+
+      cardTheme: CardThemeData(
+        elevation: 4,
+        shadowColor: Colors.black.withOpacity(0.1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+
       inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor:
+            isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
+
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          elevation: 0,
+          backgroundColor: Colors.deepPurple,
+          foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+              borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(vertical: 14),
           textStyle: const TextStyle(
               fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
-      snackBarTheme: const SnackBarThemeData(
+
+      snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor:
+            isDark ? Colors.grey.shade900 : Colors.black87,
+        contentTextStyle: const TextStyle(color: Colors.white),
+      ),
+
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        backgroundColor:
+            isDark ? const Color(0xFF0F172A) : Colors.white,
+        foregroundColor:
+            isDark ? Colors.white : Colors.black,
       ),
     );
   }
 }
 
-// ─── AuthWrapper ─────────────────────────────────────────────────────────────
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -80,8 +133,6 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<SessionModel?>(
       stream: SessionManager.instance.sessionStream,
       builder: (context, snapshot) {
-
-        // Still waiting for first emit.
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SplashScreen();
         }

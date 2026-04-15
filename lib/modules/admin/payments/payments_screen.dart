@@ -200,17 +200,28 @@ class PaymentsScreen extends StatelessWidget {
 
                   ElevatedButton(
                     onPressed: () async {
-                      await FirebaseFirestore.instance
-                          .collection('payments')
-                          .doc(docId)
-                          .update({
-                        "status": "paid",
-                        "method": method,
-                        "paidAt": FieldValue.serverTimestamp(),
-                      });
+  await FirebaseFirestore.instance.runTransaction((txn) async {
+    final paymentRef =
+        FirebaseFirestore.instance.collection('payments').doc(docId);
 
-                      Navigator.pop(context);
-                    },
+    final orderRef =
+        FirebaseFirestore.instance.collection('orders').doc(payment["orderId"]);
+
+    // ✅ UPDATE PAYMENT
+    txn.update(paymentRef, {
+      "status": "paid",
+      "method": method,
+      "paidAt": FieldValue.serverTimestamp(),
+    });
+
+    // 🔥 SYNC ORDER (THIS FIXES DASHBOARD)
+    txn.update(orderRef, {
+      "paymentStatus": "paid",
+    });
+  });
+
+  Navigator.pop(context);
+},
                     child: const Text("Confirm Payment"),
                   )
                 ],

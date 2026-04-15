@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key});
@@ -9,10 +10,41 @@ class AdminHome extends StatefulWidget {
 }
 
 class _AdminHomeState extends State<AdminHome> {
-
   final db = FirebaseFirestore.instance;
 
-  // 🔥 SAFE ITEMS PARSER (CRASH FIX)
+  int selectedFilter = -1;
+
+  final List<String> filters = ["All", "Today", "Week", "Month", "Year"];
+
+  // 🔥 FILTER LOGIC
+  bool _matchFilter(Timestamp? timestamp) {
+    if (selectedFilter == -1 || selectedFilter == 0) return true;
+    if (timestamp == null) return false;
+
+    final date = timestamp.toDate();
+    final now = DateTime.now();
+
+    switch (selectedFilter) {
+      case 1:
+        return date.year == now.year &&
+            date.month == now.month &&
+            date.day == now.day;
+
+      case 2:
+        final weekAgo = now.subtract(const Duration(days: 7));
+        return date.isAfter(weekAgo);
+
+      case 3:
+        return date.year == now.year && date.month == now.month;
+
+      case 4:
+        return date.year == now.year;
+
+      default:
+        return true;
+    }
+  }
+
   List<Map<String, dynamic>> _parseItems(dynamic raw) {
     if (raw == null) return [];
 
@@ -34,16 +66,21 @@ class _AdminHomeState extends State<AdminHome> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: const Color(0xFFF2F5FA),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
+        child: RefreshIndicator(
+          onRefresh: () async => setState(() {}),
+          child: ListView(
             children: [
-              _buildHeader(),
-              _buildOverview(),
-              _buildSalesTrend(),
-              _buildRecentOrders(),
-              _buildQuickActions(),
+              _header(),
+              _filters(),
+
+              // ⭐ NEW: SALES CHART ADDED (ERP ANALYTICS)
+              _salesChartSection(),
+
+              _overview(),
+              _recentOrders(),
+              _quickActions(),
             ],
           ),
         ),
@@ -51,100 +88,182 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
-  // 🔹 HEADER (UNCHANGED)
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
+  // 🔷 HEADER
+  Widget _header() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF5F5CFF), Color(0xFF8F94FB)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.deepPurple.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+          )
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.store, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("BizAdmin",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text("Welcome back, Admin",
-                      style: TextStyle(color: Colors.grey)),
-                ],
-              ),
+              Text("Dashboard",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("Business Insights",
+                  style: TextStyle(color: Colors.white70)),
             ],
           ),
-          const CircleAvatar(
-            backgroundColor: Colors.white,
-            child: Icon(Icons.notifications_none),
-          ),
+          Row(
+            children: [
+              _iconBtn(Icons.dark_mode),
+              const SizedBox(width: 8),
+              _iconBtn(Icons.notifications),
+            ],
+          )
         ],
       ),
     );
   }
 
-  // 🔹 OVERVIEW (SAFE)
-  Widget _buildOverview() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: db.collection('orders').snapshots(),
-      builder: (context, snapshot) {
+  Widget _iconBtn(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: Colors.white),
+    );
+  }
 
+  // 🔷 FILTERS
+  Widget _filters() {
+    return SizedBox(
+      height: 55,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: filters.length,
+        itemBuilder: (_, index) {
+          final isSelected = selectedFilter == index;
+
+          return GestureDetector(
+            onTap: () => setState(() => selectedFilter = index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.only(right: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? const LinearGradient(
+                        colors: [Color(0xFF5F5CFF), Color(0xFF8F94FB)])
+                    : null,
+                color: isSelected ? null : Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: isSelected
+                        ? Colors.deepPurple.withOpacity(0.3)
+                        : Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                  )
+                ],
+              ),
+              child: Text(
+                filters[index],
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ⭐ NEW ERP SALES CHART SECTION
+  Widget _salesChartSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: db.collection('orders').orderBy('createdAt').snapshots(),
+      builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Padding(
-            padding: EdgeInsets.all(20),
+            padding: EdgeInsets.all(16),
             child: CircularProgressIndicator(),
           );
         }
 
         final docs = snapshot.data!.docs;
 
-        int totalOrders = docs.length;
-        int pendingOrders = 0;
-        double totalSales = 0;
+        List<FlSpot> spots = [];
+        int index = 0;
 
-        for (var doc in docs) {
+        for (var doc in docs.take(7)) {
           final data = doc.data() as Map<String, dynamic>;
 
-          final status = (data['status'] ?? '').toString().toLowerCase();
-          final paymentStatus =
-              (data['paymentStatus'] ?? data['status'] ?? '')
-                  .toString()
-                  .toLowerCase();
+          if (!_matchFilter(data['createdAt'])) continue;
 
-          final amount = (data['totalAmount'] ?? 0);
+          final amount = data['totalAmount'];
+          final double value =
+              amount is int ? amount.toDouble() : (amount ?? 0.0);
 
-          final double safeAmount =
-              amount is int ? amount.toDouble() : (amount is double ? amount : 0);
-
-          if (status == 'pending') pendingOrders++;
-
-          if (paymentStatus == 'paid' || status == 'delivered') {
-            totalSales += safeAmount;
-          }
+          spots.add(FlSpot(index.toDouble(), value));
+          index++;
         }
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+        return Container(
+          height: 250,
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+              )
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Overview",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _card("$totalOrders", "Orders", Icons.shopping_bag, Colors.blue),
-                  _card("₹${totalSales.toInt()}", "Sales",
-                      Icons.currency_rupee, Colors.green),
-                  _card("$pendingOrders", "Pending",
-                      Icons.access_time, Colors.red),
-                ],
+              const Text(
+                "Sales Analytics",
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+
+              Expanded(
+                child: LineChart(
+                  LineChartData(
+                    gridData: FlGridData(show: false),
+                    titlesData: FlTitlesData(show: false),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        isCurved: true,
+                        spots: spots,
+                        dotData: FlDotData(show: false),
+                        color: Colors.deepPurple,
+                        barWidth: 3,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -153,215 +272,224 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
-  Widget _card(String value, String title, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 5),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
-          ],
-        ),
-        child: Column(
-          children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(height: 10),
-            Text(value,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text(title, style: const TextStyle(color: Colors.grey)),
-          ],
-        ),
-      ),
-    );
-  }
+  // 🔷 OVERVIEW KPI
+  Widget _overview() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: db.collection('orders').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(20),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
 
-  // 🔹 SALES TREND
-  Widget _buildSalesTrend() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        height: 250,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Text("Sales Trend (Coming Soon)"),
-      ),
-    );
-  }
+        final docs = snapshot.data!.docs;
 
-  // 🔥 RECENT ORDERS (FULL FIXED)
-  Widget _buildRecentOrders() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Recent Orders",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text("Live", style: TextStyle(color: Colors.green)),
-              ],
-            ),
-            const SizedBox(height: 10),
+        int total = 0;
+        int pending = 0;
+        int packed = 0;
+        int delivered = 0;
+        int undelivered = 0;
+        double revenue = 0;
 
-            StreamBuilder<QuerySnapshot>(
-              stream: db
-                  .collection('orders')
-                  .orderBy('createdAt', descending: true)
-                  .limit(5)
-                  .snapshots(),
+        for (var doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
 
-              builder: (context, snapshot) {
+          if (!_matchFilter(data['createdAt'])) continue;
 
-                if (!snapshot.hasData) {
-                  return const CircularProgressIndicator();
-                }
+          total++;
 
-                final docs = snapshot.data!.docs;
+          final status = (data['status'] ?? '').toLowerCase();
+          final payment = (data['paymentStatus'] ?? '').toLowerCase();
 
-                return Column(
-                  children: docs.map<Widget>((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
+          final amount = data['totalAmount'];
+          final double safeAmount =
+              amount is int ? amount.toDouble() : (amount ?? 0.0);
 
-                    final status = (data['status'] ?? 'pending').toString();
-                    final shopName = data['shopName'] ?? "Unknown Shop";
+          if (status == 'pending') pending++;
+          if (status == 'packed') packed++;
+          if (status == 'delivered') delivered++;
+          if (status == 'pending' || status == 'packed') undelivered++;
 
-                    final items = _parseItems(data['items']);
+          if (payment == 'paid') revenue += safeAmount;
+        }
 
-                    String products = items
-                        .take(2)
-                        .map((e) =>
-                            "${e['productName'] ?? ''} x${e['qty'] ?? 0}")
-                        .join(", ");
-
-                    if (items.length > 2) {
-                      products += " +${items.length - 2} more";
-                    }
-
-                    return Column(
-                      children: [
-                        _orderTile(
-                          shopName,
-                          products.isEmpty ? "No items" : products,
-                          "₹${data['totalAmount'] ?? 0}",
-                          status,
-                          _getStatusColor(status),
-                        ),
-                        const Divider(),
-                      ],
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _orderTile(
-    String title,
-    String subtitle,
-    String price,
-    String status,
-    Color color,
-  ) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.1),
-        child: Icon(Icons.receipt, color: color),
-      ),
-      title: Text(title,
-          style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(price,
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(status,
-                style: TextStyle(color: color, fontSize: 12)),
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.2,
+            children: [
+              _kpi("Orders", "$total", Icons.shopping_cart,
+                  [Color(0xFF36D1DC), Color(0xFF5B86E5)]),
+              _kpi("Revenue", "₹${revenue.toInt()}",
+                  Icons.currency_rupee,
+                  [Color(0xFF11998E), Color(0xFF38EF7D)]),
+              _kpi("Pending", "$pending", Icons.timelapse,
+                  [Color(0xFFFF8008), Color(0xFFFFC837)]),
+              _kpi("Packed", "$packed", Icons.inventory,
+                  [Color(0xFF654EA3), Color(0xFFEAafc8)]),
+              _kpi("Delivered", "$delivered", Icons.check_circle,
+                  [Color(0xFF56ab2f), Color(0xFFA8E063)]),
+              _kpi("Undelivered", "$undelivered", Icons.cancel,
+                  [Color(0xFFCB356B), Color(0xFFBD3F32)]),
+            ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _kpi(String title, String value, IconData icon, List<Color> colors) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: colors.first.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.white),
+          const Spacer(),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(title, style: const TextStyle(color: Colors.white70)),
         ],
       ),
     );
   }
 
-  Color _getStatusColor(String status) {
+  // 🔷 RECENT ORDERS
+  Widget _recentOrders() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Recent Orders",
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text("Live", style: TextStyle(color: Colors.green)),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          StreamBuilder<QuerySnapshot>(
+            stream: db
+                .collection('orders')
+                .orderBy('createdAt', descending: true)
+                .limit(5)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const CircularProgressIndicator();
+              }
+
+              final docs = snapshot.data!.docs.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return _matchFilter(data['createdAt']);
+              }).toList();
+
+              return Column(
+                children: docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final status = data['status'] ?? "pending";
+                  final items = _parseItems(data['items']);
+
+                  String products = items
+                      .take(2)
+                      .map((e) =>
+                          "${e['productName'] ?? 'Item'} x${e['qty'] ?? 0}")
+                      .join(", ");
+
+                  return ListTile(
+                    title: Text(data['shopName'] ?? "Shop"),
+                    subtitle: Text(products),
+                    trailing: _status(status),
+                  );
+                }).toList(),
+              );
+            },
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _status(String status) {
+    final color = _getColor(status);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(color: color, fontSize: 11),
+      ),
+    );
+  }
+
+  Color _getColor(String status) {
     switch (status.toLowerCase()) {
       case 'delivered':
         return Colors.green;
       case 'packed':
-      case 'processing':
+        return Colors.purple;
+      case 'pending':
         return Colors.orange;
-      case 'assigned':
-        return Colors.blue;
       default:
         return Colors.red;
     }
   }
 
-  Widget _buildQuickActions() {
+  // 🔷 QUICK ACTIONS
+  Widget _quickActions() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text("Quick Actions",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _action(Icons.add, "Add Product", Colors.blue),
-              _action(Icons.store, "Shops", Colors.green),
-              _action(Icons.receipt, "Orders", Colors.orange),
-              _action(Icons.people, "Users", Colors.red),
-            ],
-          ),
+          _action(Icons.add, "Add"),
+          _action(Icons.store, "Shops"),
+          _action(Icons.receipt, "Orders"),
+          _action(Icons.people, "Users"),
         ],
       ),
     );
   }
 
-  Widget _action(IconData icon, String text, Color color) {
+  Widget _action(IconData icon, String text) {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+                colors: [Color(0xFF5F5CFF), Color(0xFF8F94FB)]),
+            borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(icon, color: color),
+          child: Icon(icon, color: Colors.white),
         ),
         const SizedBox(height: 6),
         Text(text, style: const TextStyle(fontSize: 12)),

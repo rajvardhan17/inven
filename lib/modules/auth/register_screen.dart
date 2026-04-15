@@ -21,11 +21,11 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey             = GlobalKey<FormState>();
-  final _nameController      = TextEditingController();
-  final _emailController     = TextEditingController();
-  final _phoneController     = TextEditingController();
-  final _passwordController  = TextEditingController();
+  final _formKey            = GlobalKey<FormState>();
+  final _nameController     = TextEditingController();
+  final _emailController    = TextEditingController();
+  final _phoneController    = TextEditingController();
+  final _passwordController = TextEditingController();
 
   bool _isLoading       = false;
   bool _obscurePassword = true;
@@ -38,8 +38,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-
-  // ── Registration ────────────────────────────────────────────────────────────
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
@@ -58,6 +56,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final user = credential.user!;
       await user.updateDisplayName(name);
 
+      // ✅ Doc saved at uid path — correct structure.
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -117,8 +116,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         behavior: SnackBarBehavior.floating,
       ));
   }
-
-  // ── UI ──────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {

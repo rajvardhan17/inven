@@ -16,8 +16,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey           = GlobalKey<FormState>();
-  final _emailController   = TextEditingController();
+  final _formKey            = GlobalKey<FormState>();
+  final _emailController    = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isLoading       = false;
@@ -29,8 +29,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-
-  // ── Auth ────────────────────────────────────────────────────────────────────
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -45,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       await SessionManager.instance.loadSession(credential.user!.uid);
-      // AuthWrapper reacts to sessionStream — no Navigator call needed.
+      // AuthWrapper reacts to sessionStream automatically.
 
     } on FirebaseAuthException catch (e) {
       _showError(_mapAuthError(e));
@@ -86,8 +84,6 @@ class _LoginScreenState extends State<LoginScreen> {
         behavior: SnackBarBehavior.floating,
       ));
   }
-
-  // ── UI ──────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
