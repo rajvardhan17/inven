@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/app_theme.dart';
+
 class AddUserScreen extends StatefulWidget {
   const AddUserScreen({super.key});
 
@@ -30,7 +32,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
         .update({'role': role});
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("User assigned as $role")),
+      SnackBar(
+        content: Text("User assigned as $role"),
+        backgroundColor: AppTheme.surface2,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -42,7 +48,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -50,9 +56,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF6A82FB), Color(0xFF4A90E2)],
-                ),
+                gradient: AppTheme.accentGrad,
                 borderRadius:
                     BorderRadius.vertical(bottom: Radius.circular(25)),
               ),
@@ -63,13 +67,13 @@ class _AddUserScreenState extends State<AddUserScreen> {
                     children: [
                       IconButton(
                         icon:
-                            const Icon(Icons.arrow_back, color: Colors.white),
+                            const Icon(Icons.arrow_back, color: AppTheme.bg),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Text(
                         "Approve Users",
                         style: TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.bg,
                             fontSize: 22,
                             fontWeight: FontWeight.bold),
                       ),
@@ -79,6 +83,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
                   /// 🔍 SEARCH
                   TextField(
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     onChanged: (val) {
                       setState(() {
                         searchQuery = val;
@@ -86,12 +91,16 @@ class _AddUserScreenState extends State<AddUserScreen> {
                     },
                     decoration: InputDecoration(
                       hintText: "Search user...",
+                      hintStyle:
+                          const TextStyle(color: AppTheme.textSecondary),
                       filled: true,
-                      fillColor: Colors.white,
-                      prefixIcon: const Icon(Icons.search),
+                      fillColor: AppTheme.surface,
+                      prefixIcon: const Icon(Icons.search,
+                          color: AppTheme.textSecondary),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderSide:
+                            const BorderSide(color: AppTheme.border),
                       ),
                     ),
                   ),
@@ -104,7 +113,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('users')
-                    .where('role', isEqualTo: 'user') // ⭐ IMPORTANT
+                    .where('role', isEqualTo: 'user')
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
@@ -116,7 +125,12 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
                   if (users.isEmpty) {
                     return const Center(
-                        child: Text("No pending users"));
+                      child: Text(
+                        "No pending users",
+                        style:
+                            TextStyle(color: AppTheme.textSecondary),
+                      ),
+                    );
                   }
 
                   return ListView.builder(
@@ -130,23 +144,19 @@ class _AddUserScreenState extends State<AddUserScreen> {
                             horizontal: 16, vertical: 8),
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppTheme.surface,
                           borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              blurRadius: 10,
-                              color: Colors.black.withOpacity(0.05),
-                            ),
-                          ],
+                          boxShadow: AppTheme.cardShadow,
                         ),
                         child: Column(
                           children: [
                             Row(
                               children: [
                                 CircleAvatar(
-                                  backgroundColor: Colors.orange.withOpacity(0.1),
+                                  backgroundColor:
+                                      AppTheme.accentSoft,
                                   child: const Icon(Icons.person,
-                                      color: Colors.orange),
+                                      color: AppTheme.accent),
                                 ),
                                 const SizedBox(width: 12),
 
@@ -158,15 +168,20 @@ class _AddUserScreenState extends State<AddUserScreen> {
                                     children: [
                                       Text(user['name'] ?? '',
                                           style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
+                                              color:
+                                                  AppTheme.textPrimary,
+                                              fontWeight:
+                                                  FontWeight.bold,
                                               fontSize: 16)),
                                       const SizedBox(height: 4),
                                       Text(user['phone'] ?? '',
                                           style: const TextStyle(
-                                              color: Colors.grey)),
+                                              color:
+                                                  AppTheme.textSecondary)),
                                       Text(user['email'] ?? '',
                                           style: const TextStyle(
-                                              color: Colors.grey,
+                                              color:
+                                                  AppTheme.textMuted,
                                               fontSize: 12)),
                                     ],
                                   ),
@@ -176,7 +191,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
                                 IconButton(
                                   onPressed: () => _deleteUser(uid),
                                   icon: const Icon(Icons.delete,
-                                      color: Colors.red),
+                                      color: AppTheme.red),
                                 )
                               ],
                             ),
@@ -184,46 +199,54 @@ class _AddUserScreenState extends State<AddUserScreen> {
                             const SizedBox(height: 10),
 
                             /// ACTION BUTTONS
-                            /// ACTION BUTTONS
                             Row(
-                                children: [
-                                    Expanded(
-                                        child: ElevatedButton.icon(
-                                            onPressed: () => _changeRole(uid, "salesman"),
-                                            icon: const Icon(Icons.work, color: Colors.white),
-                                            label: const Text(
-                                                "Salesman",
-                                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                            ),
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.blue.shade700,
-                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(10),
-                                                ),
-                                            ),
-                                        ),
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () =>
+                                        _changeRole(uid, "salesman"),
+                                    icon: const Icon(Icons.work, size: 18),
+                                    label: const Text("Salesman"),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          AppTheme.accent,
+                                      foregroundColor: AppTheme.bg,
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
                                     ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                        child: ElevatedButton.icon(
-                                            onPressed: () => _changeRole(uid, "distributor"),
-                                            icon: const Icon(Icons.local_shipping, color: Colors.white),
-                                            label: const Text(
-                                                "Distributor",
-                                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                            ),
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.green.shade700,
-                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(10),
-                                                ),        
-                                            ),
-                                        ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () =>
+                                        _changeRole(uid, "distributor"),
+                                    icon: const Icon(
+                                        Icons.local_shipping,
+                                        size: 18),
+                                    label: const Text("Distributor"),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          AppTheme.surface2,
+                                      foregroundColor:
+                                          AppTheme.textPrimary,
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
                                     ),
-                                ],
-                              )
+                                  ),
+                                ),
+                              ],
+                            )
                           ],
                         ),
                       );

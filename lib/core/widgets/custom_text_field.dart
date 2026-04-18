@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/app_theme.dart';
 
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -14,6 +15,8 @@ class CustomTextField extends StatelessWidget {
   final TextCapitalization textCapitalization;
   final void Function(String)? onFieldSubmitted;
   final TextInputAction? textInputAction;
+  final bool enabled;
+  final int maxLines;
 
   const CustomTextField({
     super.key,
@@ -29,6 +32,8 @@ class CustomTextField extends StatelessWidget {
     this.textCapitalization = TextCapitalization.none,
     this.onFieldSubmitted,
     this.textInputAction,
+    this.enabled = true,
+    this.maxLines = 1,
   });
 
   @override
@@ -42,30 +47,55 @@ class CustomTextField extends StatelessWidget {
       inputFormatters: inputFormatters,
       onFieldSubmitted: onFieldSubmitted,
       validator: validator,
+      enabled: enabled,
+      maxLines: maxLines,
+      style: const TextStyle(
+  color: AppTheme.textPrimary, // ✅ THIS FIXES TEXT VISIBILITY
+),
+      cursorColor: AppTheme.accent,
       decoration: InputDecoration(
         hintText: hintText,
+        hintStyle: const TextStyle(
+          color: AppTheme.textMuted,
+          fontSize: 13,
+        ),
         prefixText: prefixText,
-        prefixIcon: Icon(prefixIcon),
+        prefixStyle: const TextStyle(color: AppTheme.textSecondary),
+        prefixIcon: Icon(prefixIcon, color: AppTheme.textSecondary, size: 18),
         suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: AppTheme.surface2,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
+
+        // Borders
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          borderSide: const BorderSide(color: AppTheme.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          borderSide: const BorderSide(color: AppTheme.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: Colors.deepPurple, width: 1.5),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          borderSide: const BorderSide(
+            color: AppTheme.accent,
+            width: 1.4,
+          ),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade700),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          borderSide: const BorderSide(color: AppTheme.red),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade700, width: 1.5),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          borderSide: const BorderSide(
+            color: AppTheme.red,
+            width: 1.4,
+          ),
         ),
       ),
     );

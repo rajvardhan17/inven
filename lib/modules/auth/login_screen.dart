@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/exceptions/app_exception.dart';
 import '../../core/exceptions/session_exception.dart';
 import '../../core/session/session_manager.dart';
@@ -43,7 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       await SessionManager.instance.loadSession(credential.user!.uid);
-      // AuthWrapper reacts to sessionStream automatically.
 
     } on FirebaseAuthException catch (e) {
       _showError(_mapAuthError(e));
@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: AppTheme.red,
         behavior: SnackBarBehavior.floating,
       ));
   }
@@ -88,12 +88,11 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: Form(
               key: _formKey,
               child: Column(
@@ -121,16 +120,25 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildHeader() {
     return const Column(
       children: [
-        Icon(Icons.store_rounded, size: 64, color: Colors.deepPurple),
+        Icon(Icons.store_rounded, size: 64, color: AppTheme.accent),
         SizedBox(height: 12),
-        Text('BizAdmin',
-            style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5)),
+        Text(
+          'BizAdmin',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+            color: AppTheme.textPrimary,
+          ),
+        ),
         SizedBox(height: 4),
-        Text('Login to continue',
-            style: TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(
+          'Login to continue',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        ),
       ],
     );
   }
@@ -160,9 +168,12 @@ class _LoginScreenState extends State<LoginScreen> {
       textInputAction: TextInputAction.done,
       onFieldSubmitted: (_) => _login(),
       suffixIcon: IconButton(
-        icon: Icon(_obscurePassword
-            ? Icons.visibility_off_outlined
-            : Icons.visibility_outlined),
+        icon: Icon(
+          _obscurePassword
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
+          color: AppTheme.textSecondary,
+        ),
         onPressed: () =>
             setState(() => _obscurePassword = !_obscurePassword),
       ),
@@ -178,11 +189,11 @@ class _LoginScreenState extends State<LoginScreen> {
     return Align(
       alignment: Alignment.centerRight,
       child: TextButton(
-        onPressed: () {
-          // TODO: Navigator.of(context).push → ForgotPasswordScreen
-        },
-        child: const Text('Forgot password?',
-            style: TextStyle(color: Colors.deepPurple)),
+        onPressed: () {},
+        child: const Text(
+          'Forgot password?',
+          style: TextStyle(color: AppTheme.accent),
+        ),
       ),
     );
   }
@@ -202,16 +213,23 @@ class _LoginScreenState extends State<LoginScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text("Don't have an account? "),
+        const Text(
+          "Don't have an account? ",
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
         GestureDetector(
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-                builder: (_) => const RegisterScreen()),
+              builder: (_) => const RegisterScreen(),
+            ),
           ),
-          child: const Text('Register',
-              style: TextStyle(
-                  color: Colors.deepPurple,
-                  fontWeight: FontWeight.bold)),
+          child: const Text(
+            'Register',
+            style: TextStyle(
+              color: AppTheme.accent,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ],
     );

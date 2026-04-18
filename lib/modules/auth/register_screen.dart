@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/exceptions/app_exception.dart';
 import '../../core/session/session_manager.dart';
 import '../../core/widgets/custom_button.dart';
@@ -56,7 +57,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final user = credential.user!;
       await user.updateDisplayName(name);
 
-      // ✅ Doc saved at uid path — correct structure.
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -78,7 +78,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
           content: const Text('Account created successfully!'),
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: AppTheme.green,
           behavior: SnackBarBehavior.floating,
         ));
 
@@ -112,7 +112,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: AppTheme.red,
         behavior: SnackBarBehavior.floating,
       ));
   }
@@ -120,19 +120,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
         title: const Text('Register'),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black87,
+        backgroundColor: AppTheme.surface,
+        foregroundColor: AppTheme.textPrimary,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppTheme.border),
+        ),
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Form(
               key: _formKey,
               child: Column(
@@ -163,13 +166,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _buildHeader() {
     return const Column(
       children: [
-        Icon(Icons.person_add_rounded, size: 64, color: Colors.deepPurple),
+        Icon(Icons.person_add_rounded, size: 64, color: AppTheme.accent),
         SizedBox(height: 12),
-        Text('Create Account',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+        Text(
+          'Create Account',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
         SizedBox(height: 4),
-        Text('Register to get started',
-            style: TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(
+          'Register to get started',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        ),
       ],
     );
   }
@@ -234,9 +248,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       textInputAction: TextInputAction.done,
       onFieldSubmitted: (_) => _register(),
       suffixIcon: IconButton(
-        icon: Icon(_obscurePassword
-            ? Icons.visibility_off_outlined
-            : Icons.visibility_outlined),
+        icon: Icon(
+          _obscurePassword
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
+          color: AppTheme.textSecondary,
+        ),
         onPressed: () =>
             setState(() => _obscurePassword = !_obscurePassword),
       ),
@@ -263,16 +280,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text('Already have an account? '),
+        const Text(
+          'Already have an account? ',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
         GestureDetector(
           onTap: () => Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(
                 builder: (_) => const LoginScreen()),
           ),
-          child: const Text('Login',
-              style: TextStyle(
-                  color: Colors.deepPurple,
-                  fontWeight: FontWeight.bold)),
+          child: const Text(
+            'Login',
+            style: TextStyle(
+              color: AppTheme.accent,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ],
     );

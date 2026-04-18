@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../../core/app_theme.dart';
 
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key});
@@ -9,37 +10,42 @@ class AdminHome extends StatefulWidget {
   State<AdminHome> createState() => _AdminHomeState();
 }
 
-class _AdminHomeState extends State<AdminHome> {
+class _AdminHomeState extends State<AdminHome> with TickerProviderStateMixin {
   final db = FirebaseFirestore.instance;
-
-  int selectedFilter = -1;
+  int selectedFilter = 0;
+  late AnimationController _fadeCtrl;
+  late Animation<double> _fadeAnim;
 
   final List<String> filters = ["All", "Today", "Week", "Month", "Year"];
 
-  // 🔥 FILTER LOGIC
-  bool _matchFilter(Timestamp? timestamp) {
-    if (selectedFilter == -1 || selectedFilter == 0) return true;
-    if (timestamp == null) return false;
+  @override
+  void initState() {
+    super.initState();
+    _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _fadeCtrl.forward();
+  }
 
+  @override
+  void dispose() {
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matchFilter(Timestamp? timestamp) {
+    if (selectedFilter == 0) return true;
+    if (timestamp == null) return false;
     final date = timestamp.toDate();
     final now = DateTime.now();
-
     switch (selectedFilter) {
       case 1:
-        return date.year == now.year &&
-            date.month == now.month &&
-            date.day == now.day;
-
+        return date.year == now.year && date.month == now.month && date.day == now.day;
       case 2:
-        final weekAgo = now.subtract(const Duration(days: 7));
-        return date.isAfter(weekAgo);
-
+        return date.isAfter(now.subtract(const Duration(days: 7)));
       case 3:
         return date.year == now.year && date.month == now.month;
-
       case 4:
         return date.year == now.year;
-
       default:
         return true;
     }
@@ -47,86 +53,97 @@ class _AdminHomeState extends State<AdminHome> {
 
   List<Map<String, dynamic>> _parseItems(dynamic raw) {
     if (raw == null) return [];
-
-    if (raw is List) {
-      return raw.whereType<Map>().map((e) {
-        return Map<String, dynamic>.from(e);
-      }).toList();
-    }
-
-    if (raw is Map) {
-      return raw.values.whereType<Map>().map((e) {
-        return Map<String, dynamic>.from(e);
-      }).toList();
-    }
-
+    if (raw is List) return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    if (raw is Map) return raw.values.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     return [];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F5FA),
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async => setState(() {}),
-          child: ListView(
-            children: [
-              _header(),
-              _filters(),
-
-              // ⭐ NEW: SALES CHART ADDED (ERP ANALYTICS)
-              _salesChartSection(),
-
-              _overview(),
-              _recentOrders(),
-              _quickActions(),
-            ],
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: RefreshIndicator(
+            color: AppTheme.accent,
+            backgroundColor: AppTheme.surface,
+            onRefresh: () async {
+              _fadeCtrl.reset();
+              setState(() {});
+              _fadeCtrl.forward();
+            },
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: _header()),
+                SliverToBoxAdapter(child: _filters()),
+                SliverToBoxAdapter(child: _kpiSection()),
+                SliverToBoxAdapter(child: _salesChartSection()),
+                SliverToBoxAdapter(child: _recentOrders()),
+                SliverToBoxAdapter(child: _quickActions()),
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // 🔷 HEADER
+  // ─── HEADER ───────────────────────────────────────────────
   Widget _header() {
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5F5CFF), Color(0xFF8F94FB)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.deepPurple.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 6),
-          )
-        ],
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Dashboard",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold)),
-              SizedBox(height: 4),
-              Text("Business Insights",
-                  style: TextStyle(color: Colors.white70)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(color: AppTheme.green, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text("LIVE", style: TextStyle(
+                      color: AppTheme.green,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                    )),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text("Dashboard", style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.8,
+                  height: 1.1,
+                )),
+                const SizedBox(height: 4),
+                const Text("Business Insights", style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                )),
+              ],
+            ),
           ),
           Row(
             children: [
-              _iconBtn(Icons.dark_mode),
+              _iconBtn(Icons.dark_mode_outlined),
               const SizedBox(width: 8),
-              _iconBtn(Icons.notifications),
+              _iconBtn(Icons.notifications_outlined),
             ],
           )
         ],
@@ -138,52 +155,46 @@ class _AdminHomeState extends State<AdminHome> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: AppTheme.border),
       ),
-      child: Icon(icon, color: Colors.white),
+      child: Icon(icon, color: AppTheme.textSecondary, size: 20),
     );
   }
 
-  // 🔷 FILTERS
+  // ─── FILTERS ──────────────────────────────────────────────
   Widget _filters() {
     return SizedBox(
-      height: 55,
+      height: 52,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: filters.length,
-        itemBuilder: (_, index) {
-          final isSelected = selectedFilter == index;
-
+        itemBuilder: (_, i) {
+          final sel = selectedFilter == i;
           return GestureDetector(
-            onTap: () => setState(() => selectedFilter = index),
+            onTap: () => setState(() => selectedFilter = i),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.only(right: 10),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                gradient: isSelected
-                    ? const LinearGradient(
-                        colors: [Color(0xFF5F5CFF), Color(0xFF8F94FB)])
-                    : null,
-                color: isSelected ? null : Colors.white,
+                gradient: sel ? AppTheme.accentGrad : null,
+                color: sel ? null : AppTheme.surface,
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: isSelected
-                        ? Colors.deepPurple.withOpacity(0.3)
-                        : Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                  )
-                ],
+                border: Border.all(
+                  color: sel ? Colors.transparent : AppTheme.border,
+                ),
+                boxShadow: sel ? AppTheme.accentShadow : null,
               ),
               child: Text(
-                filters[index],
+                filters[i],
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                  fontWeight: FontWeight.w600,
+                  color: sel ? AppTheme.bg : AppTheme.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  letterSpacing: 0.2,
                 ),
               ),
             ),
@@ -193,73 +204,210 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
-  // ⭐ NEW ERP SALES CHART SECTION
+  // ─── KPI GRID ─────────────────────────────────────────────
+  Widget _kpiSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: db.collection('orders').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(height: 200, child: AppLoader());
+        }
+
+        final docs = snapshot.data!.docs;
+        int total = 0, pending = 0, packed = 0, delivered = 0, undelivered = 0;
+        double revenue = 0;
+
+        for (var doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (!_matchFilter(data['createdAt'])) continue;
+          total++;
+          final status = (data['status'] ?? '').toLowerCase();
+          final payment = (data['paymentStatus'] ?? '').toLowerCase();
+          final amount = data['totalAmount'];
+          final double amt = amount is int ? amount.toDouble() : (amount ?? 0.0);
+          if (status == 'pending') pending++;
+          if (status == 'packed') packed++;
+          if (status == 'delivered') delivered++;
+          if (status == 'pending' || status == 'packed') undelivered++;
+          if (payment == 'paid') revenue += amt;
+        }
+
+        final kpis = [
+          _KpiData("Orders", "$total", Icons.shopping_bag_outlined, AppTheme.blue, AppTheme.blueSoft),
+          _KpiData("Revenue", "₹${revenue.toInt()}", Icons.currency_rupee_rounded, AppTheme.accent, AppTheme.accentSoft),
+          _KpiData("Pending", "$pending", Icons.hourglass_top_rounded, AppTheme.orange, AppTheme.orangeSoft),
+          _KpiData("Packed", "$packed", Icons.inventory_2_outlined, AppTheme.purple, AppTheme.purpleSoft),
+          _KpiData("Delivered", "$delivered", Icons.check_circle_outline, AppTheme.green, AppTheme.greenSoft),
+          _KpiData("Undelivered", "$undelivered", Icons.cancel_outlined, AppTheme.red, AppTheme.redSoft),
+        ];
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.5,
+            children: kpis.map((k) => _kpiCard(k)).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _kpiCard(_KpiData k) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: k.bgColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(k.icon, color: k.color, size: 16),
+          ),
+          const Spacer(),
+          Text(k.value, style: TextStyle(
+            color: k.color,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          )),
+          const SizedBox(height: 2),
+          Text(k.label, style: const TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          )),
+        ],
+      ),
+    );
+  }
+
+  // ─── SALES CHART ──────────────────────────────────────────
   Widget _salesChartSection() {
     return StreamBuilder<QuerySnapshot>(
       stream: db.collection('orders').orderBy('createdAt').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: CircularProgressIndicator(),
-          );
+          return const SizedBox(height: 200, child: AppLoader());
         }
 
         final docs = snapshot.data!.docs;
-
         List<FlSpot> spots = [];
-        int index = 0;
+        int idx = 0;
+        double maxY = 1;
 
-        for (var doc in docs.take(7)) {
+        for (var doc in docs.take(10)) {
           final data = doc.data() as Map<String, dynamic>;
-
           if (!_matchFilter(data['createdAt'])) continue;
-
           final amount = data['totalAmount'];
-          final double value =
-              amount is int ? amount.toDouble() : (amount ?? 0.0);
-
-          spots.add(FlSpot(index.toDouble(), value));
-          index++;
+          final double value = amount is int ? amount.toDouble() : (amount ?? 0.0);
+          spots.add(FlSpot(idx.toDouble(), value));
+          if (value > maxY) maxY = value;
+          idx++;
         }
 
-        return Container(
-          height: 250,
-          margin: const EdgeInsets.all(16),
+        if (spots.isEmpty) spots = [const FlSpot(0, 0), const FlSpot(1, 0)];
+
+        return AppCard(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 4),
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-              )
-            ],
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "Sales Analytics",
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Sales Analytics", style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        )),
+                        SizedBox(height: 2),
+                        Text("Revenue over time", style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        )),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentSoft,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text("LIVE", style: TextStyle(
+                      color: AppTheme.accent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    )),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-
-              Expanded(
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 160,
                 child: LineChart(
                   LineChartData(
-                    gridData: FlGridData(show: false),
-                    titlesData: FlTitlesData(show: false),
+                    minY: 0,
+                    maxY: maxY * 1.3,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxY / 3,
+                      getDrawingHorizontalLine: (_) => FlLine(
+                        color: AppTheme.border,
+                        strokeWidth: 1,
+                      ),
+                    ),
+                    titlesData: const FlTitlesData(show: false),
                     borderData: FlBorderData(show: false),
+                    lineTouchData: LineTouchData(
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipColor: (group) => AppTheme.surface2,
+                        tooltipBorder: const BorderSide(color: AppTheme.border),
+                        getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
+                          "₹${s.y.toInt()}",
+                          const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+                        )).toList(),
+                      ),
+                    ),
                     lineBarsData: [
                       LineChartBarData(
                         isCurved: true,
+                        curveSmoothness: 0.4,
                         spots: spots,
-                        dotData: FlDotData(show: false),
-                        color: Colors.deepPurple,
-                        barWidth: 3,
+                        dotData: const FlDotData(show: false),
+                        color: AppTheme.accent,
+                        barWidth: 2.5,
+                        belowBarData: BarAreaData(
+                          show: true,
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.accent.withOpacity(0.25),
+                              AppTheme.accent.withOpacity(0),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -272,228 +420,163 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
-  // 🔷 OVERVIEW KPI
-  Widget _overview() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: db.collection('orders').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.all(20),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final docs = snapshot.data!.docs;
-
-        int total = 0;
-        int pending = 0;
-        int packed = 0;
-        int delivered = 0;
-        int undelivered = 0;
-        double revenue = 0;
-
-        for (var doc in docs) {
-          final data = doc.data() as Map<String, dynamic>;
-
-          if (!_matchFilter(data['createdAt'])) continue;
-
-          total++;
-
-          final status = (data['status'] ?? '').toLowerCase();
-          final payment = (data['paymentStatus'] ?? '').toLowerCase();
-
-          final amount = data['totalAmount'];
-          final double safeAmount =
-              amount is int ? amount.toDouble() : (amount ?? 0.0);
-
-          if (status == 'pending') pending++;
-          if (status == 'packed') packed++;
-          if (status == 'delivered') delivered++;
-          if (status == 'pending' || status == 'packed') undelivered++;
-
-          if (payment == 'paid') revenue += safeAmount;
-        }
-
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.2,
-            children: [
-              _kpi("Orders", "$total", Icons.shopping_cart,
-                  [Color(0xFF36D1DC), Color(0xFF5B86E5)]),
-              _kpi("Revenue", "₹${revenue.toInt()}",
-                  Icons.currency_rupee,
-                  [Color(0xFF11998E), Color(0xFF38EF7D)]),
-              _kpi("Pending", "$pending", Icons.timelapse,
-                  [Color(0xFFFF8008), Color(0xFFFFC837)]),
-              _kpi("Packed", "$packed", Icons.inventory,
-                  [Color(0xFF654EA3), Color(0xFFEAafc8)]),
-              _kpi("Delivered", "$delivered", Icons.check_circle,
-                  [Color(0xFF56ab2f), Color(0xFFA8E063)]),
-              _kpi("Undelivered", "$undelivered", Icons.cancel,
-                  [Color(0xFFCB356B), Color(0xFFBD3F32)]),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _kpi(String title, String value, IconData icon, List<Color> colors) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: colors),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-              color: colors.first.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Colors.white),
-          const Spacer(),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(title, style: const TextStyle(color: Colors.white70)),
-        ],
-      ),
-    );
-  }
-
-  // 🔷 RECENT ORDERS
+  // ─── RECENT ORDERS ────────────────────────────────────────
   Widget _recentOrders() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Recent Orders",
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Text("Live", style: TextStyle(color: Colors.green)),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          StreamBuilder<QuerySnapshot>(
-            stream: db
-                .collection('orders')
-                .orderBy('createdAt', descending: true)
-                .limit(5)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const CircularProgressIndicator();
-              }
-
-              final docs = snapshot.data!.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return _matchFilter(data['createdAt']);
-              }).toList();
-
-              return Column(
-                children: docs.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final status = data['status'] ?? "pending";
-                  final items = _parseItems(data['items']);
-
-                  String products = items
-                      .take(2)
-                      .map((e) =>
-                          "${e['productName'] ?? 'Item'} x${e['qty'] ?? 0}")
-                      .join(", ");
-
-                  return ListTile(
-                    title: Text(data['shopName'] ?? "Shop"),
-                    subtitle: Text(products),
-                    trailing: _status(status),
-                  );
-                }).toList(),
-              );
-            },
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _status(String status) {
-    final color = _getColor(status);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(color: color, fontSize: 11),
-      ),
-    );
-  }
-
-  Color _getColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'delivered':
-        return Colors.green;
-      case 'packed':
-        return Colors.purple;
-      case 'pending':
-        return Colors.orange;
-      default:
-        return Colors.red;
-    }
-  }
-
-  // 🔷 QUICK ACTIONS
-  Widget _quickActions() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _action(Icons.add, "Add"),
-          _action(Icons.store, "Shops"),
-          _action(Icons.receipt, "Orders"),
-          _action(Icons.people, "Users"),
-        ],
-      ),
-    );
-  }
-
-  Widget _action(IconData icon, String text) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-                colors: [Color(0xFF5F5CFF), Color(0xFF8F94FB)]),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(icon, color: Colors.white),
+        const SectionHeader(
+          title: "Recent Orders",
+          subtitle: "Latest 5 transactions",
         ),
-        const SizedBox(height: 6),
-        Text(text, style: const TextStyle(fontSize: 12)),
+        StreamBuilder<QuerySnapshot>(
+          stream: db.collection('orders')
+              .orderBy('createdAt', descending: true)
+              .limit(5)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const AppLoader();
+
+            final docs = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return _matchFilter(data['createdAt']);
+            }).toList();
+
+            if (docs.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: AppEmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: "No Orders",
+                  subtitle: "Orders will appear here",
+                ),
+              );
+            }
+
+            return Column(
+              children: docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final status = data['status'] ?? 'pending';
+                final items = _parseItems(data['items']);
+                final products = items
+                    .take(2)
+                    .map((e) => "${e['productName'] ?? 'Item'} ×${e['qty'] ?? 0}")
+                    .join(", ");
+                final amount = (data['totalAmount'] ?? 0).toDouble();
+
+                return AppCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface2,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: const Icon(Icons.store_outlined, color: AppTheme.textSecondary, size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(data['shopName'] ?? 'Shop', style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            )),
+                            const SizedBox(height: 3),
+                            Text(products.isEmpty ? 'No items' : products,
+                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text("₹${amount.toInt()}", style: const TextStyle(
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          )),
+                          const SizedBox(height: 4),
+                          StatusBadge.fromStatus(status),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
       ],
     );
   }
+
+  // ─── QUICK ACTIONS ────────────────────────────────────────
+  Widget _quickActions() {
+    final actions = [
+      _ActionData(Icons.add_circle_outline, "New Order", AppTheme.accent),
+      _ActionData(Icons.store_outlined, "Shops", AppTheme.blue),
+      _ActionData(Icons.receipt_outlined, "Orders", AppTheme.purple),
+      _ActionData(Icons.people_outline, "Users", AppTheme.green),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(title: "Quick Actions"),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: actions.map((a) => _actionBtn(a)).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionBtn(_ActionData a) {
+    return Column(
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: a.color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(color: a.color.withOpacity(0.3)),
+          ),
+          child: Icon(a.icon, color: a.color, size: 22),
+        ),
+        const SizedBox(height: 8),
+        Text(a.label, style: const TextStyle(
+          color: AppTheme.textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        )),
+      ],
+    );
+  }
+}
+
+class _KpiData {
+  final String label, value;
+  final IconData icon;
+  final Color color, bgColor;
+  _KpiData(this.label, this.value, this.icon, this.color, this.bgColor);
+}
+
+class _ActionData {
+  final IconData icon;
+  final String label;
+  final Color color;
+  _ActionData(this.icon, this.label, this.color);
 }

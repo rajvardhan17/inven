@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/theme_provider.dart';
 import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
@@ -36,26 +37,20 @@ class _MainScreenState extends State<MainScreen> {
 
       // 🔥 BODY
       body: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          child: IndexedStack(
-            key: ValueKey(currentIndex),
-            index: currentIndex,
-            children: screens,
-          ),
+        child: IndexedStack(
+          index: currentIndex,
+          children: screens,
         ),
       ),
 
-      // 🔥 MODERN BOTTOM NAV
+      // 🔥 MODERN BOTTOM NAV (FIXED)
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF111827) : Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-            )
-          ],
+          color: AppTheme.surface,
+          boxShadow: AppTheme.cardShadow,
+          border: const Border(
+            top: BorderSide(color: AppTheme.border),
+          ),
         ),
         child: BottomNavigationBar(
           currentIndex: currentIndex,
@@ -63,8 +58,8 @@ class _MainScreenState extends State<MainScreen> {
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.transparent,
           elevation: 0,
-          selectedItemColor: Colors.deepPurple,
-          unselectedItemColor: Colors.grey,
+          selectedItemColor: AppTheme.accent,
+          unselectedItemColor: AppTheme.textSecondary,
           showUnselectedLabels: true,
           items: const [
             BottomNavigationBarItem(
@@ -98,18 +93,17 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // 🔥 DRAWER (ERP STYLE)
+  // 🔥 DRAWER (ERP STYLE - FIXED)
   Widget _buildDrawer() {
     return Drawer(
+      backgroundColor: AppTheme.bg,
       child: Column(
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.deepPurple, Colors.purpleAccent],
-              ),
+              gradient: AppTheme.accentGrad,
             ),
             child: const SafeArea(
               child: Text(
@@ -117,7 +111,7 @@ class _MainScreenState extends State<MainScreen> {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: AppTheme.bg,
                 ),
               ),
             ),
@@ -129,14 +123,18 @@ class _MainScreenState extends State<MainScreen> {
           _drawerItem(Icons.shopping_cart, "Orders", 3),
           _drawerItem(Icons.more_horiz, "More", 4),
 
-          const Divider(),
+          const Divider(color: AppTheme.border),
 
           // 🌙 DARK MODE TOGGLE
           ListTile(
-            leading: const Icon(Icons.dark_mode),
-            title: const Text("Dark Mode"),
+            leading: const Icon(Icons.dark_mode, color: AppTheme.textSecondary),
+            title: const Text(
+              "Dark Mode",
+              style: TextStyle(color: AppTheme.textPrimary),
+            ),
             trailing: Switch(
               value: context.watch<ThemeProvider>().isDark,
+              activeColor: AppTheme.accent,
               onChanged: (_) {
                 context.read<ThemeProvider>().toggleTheme();
               },
@@ -154,13 +152,13 @@ class _MainScreenState extends State<MainScreen> {
     return ListTile(
       leading: Icon(
         icon,
-        color: isSelected ? Colors.deepPurple : null,
+        color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
       ),
       title: Text(
         title,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? Colors.deepPurple : null,
+          color: isSelected ? AppTheme.accent : AppTheme.textPrimary,
         ),
       ),
       onTap: () {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/app_theme.dart';
+
 class ShopsScreen extends StatefulWidget {
   const ShopsScreen({super.key});
 
@@ -19,13 +21,19 @@ class _ShopsScreenState extends State<ShopsScreen> {
       child: TextField(
         controller: c,
         keyboardType: type,
+        style: const TextStyle(color: AppTheme.textPrimary),
         decoration: InputDecoration(
           labelText: label,
+          labelStyle: const TextStyle(color: AppTheme.textSecondary),
           filled: true,
-          fillColor: Colors.grey.shade100,
+          fillColor: AppTheme.surface2,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+            borderSide: BorderSide(color: AppTheme.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: AppTheme.border),
           ),
         ),
       ),
@@ -45,8 +53,10 @@ class _ShopsScreenState extends State<ShopsScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Add Shop"),
+        title: const Text("Add Shop",
+            style: TextStyle(color: AppTheme.textPrimary)),
         content: SingleChildScrollView(
           child: Column(
             children: [
@@ -88,21 +98,24 @@ class _ShopsScreenState extends State<ShopsScreen> {
 
               Navigator.pop(context);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accent,
+            ),
             child: const Text("Add Shop"),
           )
         ],
       ),
     );
   }
-  /// 🔹 Active FUNCTION
+
+  /// 🔹 TOGGLE STATUS
   Future<void> _toggleStatus(String id, bool currentStatus) async {
     await FirebaseFirestore.instance
-      .collection('shops')
-      .doc(id)
-      .update({
-        "isActive": !currentStatus,
-      });
+        .collection('shops')
+        .doc(id)
+        .update({
+      "isActive": !currentStatus,
+    });
   }
 
   /// 🔹 DELETE SHOP
@@ -110,8 +123,13 @@ class _ShopsScreenState extends State<ShopsScreen> {
     bool? confirm = await showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Delete Shop"),
-        content: const Text("Are you sure you want to delete this shop?"),
+        backgroundColor: AppTheme.surface,
+        title: const Text("Delete Shop",
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          "Are you sure you want to delete this shop?",
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -119,7 +137,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
           TextButton(
               onPressed: () => Navigator.pop(context, true),
               child: const Text("Delete",
-                  style: TextStyle(color: Colors.red))),
+                  style: TextStyle(color: AppTheme.red))),
         ],
       ),
     );
@@ -142,11 +160,11 @@ class _ShopsScreenState extends State<ShopsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: AppTheme.bg,
 
       /// ➕ ADD BUTTON
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.accent,
         onPressed: _showAddShopDialog,
         child: const Icon(Icons.add),
       ),
@@ -158,9 +176,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF43CEA2), Color(0xFF185A9D)],
-                ),
+                gradient: AppTheme.accentGrad,
                 borderRadius:
                     BorderRadius.vertical(bottom: Radius.circular(25)),
               ),
@@ -170,14 +186,14 @@ class _ShopsScreenState extends State<ShopsScreen> {
                   Row(
                     children: [
                       IconButton(
-                        icon:
-                            const Icon(Icons.arrow_back, color: Colors.white),
+                        icon: const Icon(Icons.arrow_back,
+                            color: AppTheme.bg),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Text(
                         "Shops",
                         style: TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.bg,
                             fontSize: 22,
                             fontWeight: FontWeight.bold),
                       ),
@@ -188,6 +204,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
 
                   /// 🔍 SEARCH
                   TextField(
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     onChanged: (val) {
                       setState(() {
                         searchQuery = val;
@@ -195,12 +212,16 @@ class _ShopsScreenState extends State<ShopsScreen> {
                     },
                     decoration: InputDecoration(
                       hintText: "Search shop...",
+                      hintStyle:
+                          const TextStyle(color: AppTheme.textSecondary),
                       filled: true,
-                      fillColor: Colors.white,
-                      prefixIcon: const Icon(Icons.search),
+                      fillColor: AppTheme.surface,
+                      prefixIcon: const Icon(Icons.search,
+                          color: AppTheme.textSecondary),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderSide:
+                            const BorderSide(color: AppTheme.border),
                       ),
                     ),
                   ),
@@ -217,159 +238,165 @@ class _ShopsScreenState extends State<ShopsScreen> {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                        child: CircularProgressIndicator());
                   }
 
                   var shops = _filter(snapshot.data!.docs);
 
                   if (shops.isEmpty) {
-                    return const Center(child: Text("No shops found"));
+                    return const Center(
+                      child: Text("No shops found",
+                          style: TextStyle(
+                              color: AppTheme.textSecondary)),
+                    );
                   }
 
                   return ListView.builder(
                     itemCount: shops.length,
                     itemBuilder: (context, index) {
-  var shopDoc = shops[index];
-  String id = shopDoc.id;
-  var data = shopDoc.data();
+                      var shopDoc = shops[index];
+                      String id = shopDoc.id;
+                      var data = shopDoc.data();
 
-  /// ✅ SAFE ADDRESS HANDLING
-  String addressText = "";
+                      String addressText = "";
 
-  if (data['address'] is Map) {
-    var address = data['address'] as Map<String, dynamic>;
+                      if (data['address'] is Map) {
+                        var address =
+                            data['address'] as Map<String, dynamic>;
 
-    String street = address['street'] ?? '';
-    String city = address['city'] ?? '';
-    String pincode = address['pincode'] ?? '';
+                        String street = address['street'] ?? '';
+                        String city = address['city'] ?? '';
+                        String pincode = address['pincode'] ?? '';
 
-    addressText = "$street, $city - $pincode";
-  } else if (data['address'] is String) {
-    /// 🧠 OLD DATA SUPPORT
-    addressText = data['address'];
-  }
+                        addressText = "$street, $city - $pincode";
+                      } else if (data['address'] is String) {
+                        addressText = data['address'];
+                      }
 
-  return Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: [
-        BoxShadow(
-          blurRadius: 10,
-          color: Colors.black.withOpacity(0.05),
-        ),
-      ],
-    ),
-    child: Column(
-      children: [
-        Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: Colors.green.withOpacity(0.1),
-              child: const Icon(Icons.store, color: Colors.green),
-            ),
-            const SizedBox(width: 12),
+                      return Container(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: AppTheme.cardShadow,
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor:
+                                      AppTheme.accentSoft,
+                                  child: const Icon(Icons.store,
+                                      color: AppTheme.accent),
+                                ),
+                                const SizedBox(width: 12),
 
-            /// 📦 INFO
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    data['shopName'] ?? '',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        data['shopName'] ?? '',
+                                        style: const TextStyle(
+                                            color:
+                                                AppTheme.textPrimary,
+                                            fontWeight:
+                                                FontWeight.bold,
+                                            fontSize: 16),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "Owner: ${data['ownerName'] ?? ''}",
+                                        style: const TextStyle(
+                                            color:
+                                                AppTheme.textSecondary),
+                                      ),
+                                      Text(
+                                        "📞 ${data['phone'] ?? ''}",
+                                        style: const TextStyle(
+                                            color:
+                                                AppTheme.textSecondary),
+                                      ),
+                                      Text(
+                                        "📍 $addressText",
+                                        style: const TextStyle(
+                                            color:
+                                                AppTheme.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
 
-                  const SizedBox(height: 4),
+                                IconButton(
+                                  onPressed: () => _deleteShop(id),
+                                  icon: const Icon(Icons.delete,
+                                      color: AppTheme.red),
+                                )
+                              ],
+                            ),
 
-                  Text(
-                    "Owner: ${data['ownerName'] ?? ''}",
-                    style: const TextStyle(color: Colors.grey),
-                  ),
+                            const SizedBox(height: 10),
 
-                  Text(
-                    "📞 ${data['phone'] ?? ''}",
-                    style: const TextStyle(color: Colors.grey),
-                  ),
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      "₹${data['balance'] ?? 0}",
+                                      style: const TextStyle(
+                                          color: AppTheme.red,
+                                          fontWeight:
+                                              FontWeight.bold),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      "/ ₹${data['creditLimit'] ?? 0}",
+                                      style: const TextStyle(
+                                          color:
+                                              AppTheme.accent),
+                                    ),
+                                  ],
+                                ),
 
-                  Text(
-                    "📍 $addressText",
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-
-            /// 🗑 DELETE
-            IconButton(
-              onPressed: () => _deleteShop(id),
-              icon: const Icon(Icons.delete, color: Colors.red),
-            )
-          ],
-        ),
-
-        const SizedBox(height: 10),
-
-        /// 💰 FINANCE
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Text(
-                  "₹${data['balance'] ?? 0}",
-                  style: const TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  "/ ₹${data['creditLimit'] ?? 0}",
-                  style: const TextStyle(color: Colors.green),
-                ),
-              ],
-            ),
-
-            /// STATUS
-            Row(
-  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  children: [
-    
-
-    /// 🔄 TOGGLE
-    Row(
-      children: [
-        Text(
-          (data['isActive'] ?? false) ? "Active" : "Inactive",
-          style: TextStyle(
-            color: (data['isActive'] ?? false)
-                ? Colors.green
-                : Colors.red,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        Switch(
-          value: data['isActive'] ?? false,
-          activeColor: Colors.green,
-          onChanged: (value) {
-            _toggleStatus(id, data['isActive'] ?? false);
-          },
-        ),
-      ],
-    ),
-  ],
-)
-          ],
-        )
-      ],
-    ),
-  );
-}
+                                Row(
+                                  children: [
+                                    Text(
+                                      (data['isActive'] ?? false)
+                                          ? "Active"
+                                          : "Inactive",
+                                      style: TextStyle(
+                                        color: (data['isActive'] ?? false)
+                                            ? AppTheme.accent
+                                            : AppTheme.red,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Switch(
+                                      value:
+                                          data['isActive'] ?? false,
+                                      activeColor:
+                                          AppTheme.accent,
+                                      onChanged: (value) {
+                                        _toggleStatus(id,
+                                            data['isActive'] ?? false);
+                                      },
+                                    ),
+                                  ],
+                                )
+                              ],
+                            )
+                          ],
+                        ),
+                      );
+                    },
                   );
                 },
               ),

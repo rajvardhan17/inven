@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/app_theme.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -46,17 +47,15 @@ class _UsersScreenState extends State<UsersScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: Column(
           children: [
-            /// 🔥 HEADER WITH BACK BUTTON
+            /// 🔥 HEADER
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF6A82FB), Color(0xFF4A90E2)],
-                ),
+                gradient: AppTheme.accentGrad,
                 borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
               ),
               child: Column(
@@ -64,38 +63,50 @@ class _UsersScreenState extends State<UsersScreen>
                 children: [
                   Row(
                     children: [
-                      /// 🔙 BACK BUTTON
                       IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        icon: const Icon(Icons.arrow_back, color: AppTheme.bg),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const SizedBox(width: 8),
                       const Text(
                         "Manage Users",
                         style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold),
+                          color: AppTheme.bg,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
 
-                  /// 🔍 SEARCH BAR
+                  /// 🔍 SEARCH
                   TextField(
                     onChanged: (val) {
                       setState(() {
                         searchQuery = val;
                       });
                     },
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       hintText: "Search user...",
+                      hintStyle:
+                          const TextStyle(color: AppTheme.textSecondary),
                       filled: true,
-                      fillColor: Colors.white,
-                      prefixIcon: const Icon(Icons.search),
+                      fillColor: AppTheme.surface,
+                      prefixIcon: const Icon(Icons.search,
+                          color: AppTheme.textSecondary),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusSm),
+                        borderSide:
+                            const BorderSide(color: AppTheme.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusSm),
+                        borderSide:
+                            const BorderSide(color: AppTheme.border),
                       ),
                     ),
                   ),
@@ -107,7 +118,9 @@ class _UsersScreenState extends State<UsersScreen>
             /// 🔥 TABS
             TabBar(
               controller: _tabController,
-              labelColor: Colors.black,
+              labelColor: AppTheme.accent,
+              unselectedLabelColor: AppTheme.textSecondary,
+              indicatorColor: AppTheme.accent,
               tabs: const [
                 Tab(text: "Salesmen"),
                 Tab(text: "Distributors"),
@@ -130,7 +143,7 @@ class _UsersScreenState extends State<UsersScreen>
     );
   }
 
-  /// 📋 LIST OF USERS BY ROLE
+  /// 📋 LIST OF USERS
   Widget _buildRoleList(String role) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
@@ -139,12 +152,19 @@ class _UsersScreenState extends State<UsersScreen>
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(color: AppTheme.accent),
+          );
         }
 
         var users = _filter(snapshot.data!.docs);
 
-        if (users.isEmpty) return const Center(child: Text("No users found"));
+        if (users.isEmpty) {
+          return const Center(
+            child: Text("No users found",
+                style: TextStyle(color: AppTheme.textSecondary)),
+          );
+        }
 
         return ListView.builder(
           itemCount: users.length,
@@ -153,42 +173,58 @@ class _UsersScreenState extends State<UsersScreen>
             String uid = users[index].id;
 
             return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              margin:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    blurRadius: 10,
-                    color: Colors.black.withOpacity(0.05),
-                  ),
-                ],
+                color: AppTheme.surface,
+                borderRadius:
+                    BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: AppTheme.border),
+                boxShadow: AppTheme.cardShadow,
               ),
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: Colors.deepPurple.withOpacity(0.1),
-                    child: const Icon(Icons.person, color: Colors.deepPurple),
+                    backgroundColor: AppTheme.accentSoft,
+                    child: const Icon(Icons.person,
+                        color: AppTheme.accent),
                   ),
                   const SizedBox(width: 12),
+
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(user['name'] ?? '',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(
+                          user['name'] ?? '',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text(user['phone'] ?? '',
-                            style: const TextStyle(color: Colors.grey)),
-                        Text("Role: ${user['role'] ?? 'user'}",
-                            style: const TextStyle(
-                                color: Colors.black54, fontSize: 12)),
+                        Text(
+                          user['phone'] ?? '',
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          "Role: ${user['role'] ?? 'user'}",
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                   ),
+
                   PopupMenuButton<String>(
+                    color: AppTheme.surface2,
                     onSelected: (value) {
                       if (value == "delete") {
                         _deleteUser(uid);
@@ -196,19 +232,19 @@ class _UsersScreenState extends State<UsersScreen>
                         _changeRole(uid, value);
                       }
                     },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
                         value: "salesman",
                         child: Text("Assign Salesman"),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: "distributor",
                         child: Text("Assign Distributor"),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: "delete",
                         child: Text("Delete User",
-                            style: TextStyle(color: Colors.red)),
+                            style: TextStyle(color: AppTheme.red)),
                       ),
                     ],
                   ),
