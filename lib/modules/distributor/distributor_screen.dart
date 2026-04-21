@@ -1,469 +1,308 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/app_theme.dart';
 
-import '../../core/session/session_manager.dart';
-import '../../core/session/session_model.dart';
-
-class DistributorScreen extends StatefulWidget {
-  const DistributorScreen({super.key});
+class DistributorDashboard extends StatefulWidget {
+  final String uid;
+  const DistributorDashboard({super.key, required this.uid});
 
   @override
-  State<DistributorScreen> createState() => _DistributorScreenState();
+  State<DistributorDashboard> createState() => _DistributorDashboardState();
 }
 
-class _DistributorScreenState extends State<DistributorScreen> {
-  int _selectedIndex = 0;
+class _DistributorDashboardState extends State<DistributorDashboard>
+    with SingleTickerProviderStateMixin {
+  final db = FirebaseFirestore.instance;
+  late AnimationController _fade;
+  late Animation<double> _anim;
 
-  SessionModel get _session => SessionManager.instance.currentSession!;
+  @override
+  void initState() {
+    super.initState();
+    _fade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _anim = CurvedAnimation(parent: _fade, curve: Curves.easeOut);
+    _fade.forward();
+  }
 
-  final _tabs  = const ['Orders', 'Inventory', 'Salesmen'];
-  final _icons = const [
-    Icons.receipt_long_outlined,
-    Icons.inventory_2_outlined,
-    Icons.people_outline,
-  ];
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────
+  // SAFE STATUS NORMALIZER
+  String _normalizeStatus(String raw) {
+    final s = raw.toLowerCase().trim();
+    if (s.isEmpty) return 'pending';
+    if (s == 'assigned') return 'assigned';
+    if (s == 'packed') return 'packed';
+    if (s == 'delivered') return 'delivered';
+    if (s == 'failed') return 'failed';
+    return s;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: _buildAppBar(),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _DistributorOrdersTab(distributorUid: _session.uid),
-          _InventoryTab(distributorUid: _session.uid),
-          _SalesmenTab(distributorUid: _session.uid),
-        ],
-      ),
-      bottomNavigationBar: _buildNavBar(),
-    );
-  }
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Distributor Panel',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text(_session.name,
-              style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        ],
-      ),
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black87,
-      elevation: 0.5,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.logout_outlined),
-          tooltip: 'Sign out',
-          onPressed: () async {
-            final confirmed = await _confirmSignOut(context);
-            if (confirmed == true) SessionManager.instance.signOut();
-          },
-        ),
-      ],
-    );
-  }
-
-  NavigationBar _buildNavBar() {
-    return NavigationBar(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-      backgroundColor: Colors.white,
-      destinations: List.generate(
-        _tabs.length,
-        (i) => NavigationDestination(
-          icon: Icon(_icons[i]),
-          label: _tabs[i],
+      backgroundColor: AppTheme.bg,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _anim,
+          child: RefreshIndicator(
+            color: AppTheme.green,
+            backgroundColor: AppTheme.surface,
+            onRefresh: () async {
+              setState(() {});
+              _fade.forward(from: 0);
+            },
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(child: _header()),
+                SliverToBoxAdapter(child: _kpiGrid()),
+                SliverToBoxAdapter(child: _pendingBanner()),
+                SliverToBoxAdapter(child: _recentDeliveries()),
+                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Future<bool?> _confirmSignOut(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('You will be returned to the login screen.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Sign out',
-                  style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-  }
-}
+  // ─────────────────────────────────────────────
+  Widget _header() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: db.collection('users').doc(widget.uid).snapshots(),
+      builder: (_, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>? ?? {};
+        final name = data['name'] ?? 'Distributor';
 
-// ─── Orders Tab ───────────────────────────────────────────────────────────────
-
-class _DistributorOrdersTab extends StatelessWidget {
-  final String distributorUid;
-  const _DistributorOrdersTab({required this.distributorUid});
-
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'delivered': return Colors.green;
-      case 'pending':   return Colors.orange;
-      case 'cancelled': return Colors.red;
-      default:          return Colors.blueGrey;
-    }
-  }
-
-  Future<void> _updateStatus(String docId, String newStatus) async {
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(docId)
-        .update({'status': newStatus});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('distributorUid', isEqualTo: distributorUid)
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return const _ErrorView(message: 'Failed to load orders.');
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-
-        if (docs.isEmpty) {
-          return const _EmptyView(
-            icon: Icons.receipt_long_outlined,
-            message: 'No orders assigned yet.',
-          );
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) {
-            final data   = docs[i].data() as Map<String, dynamic>;
-            final docId  = docs[i].id;
-            final status = (data['status'] as String?) ?? 'pending';
-
-            return Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0D1F18), Color(0xFF122A1F)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(color: AppTheme.green.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          (data['customerName'] as String?) ?? '—',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: _statusColor(status).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            status.toUpperCase(),
-                            style: TextStyle(
-                                fontSize: 10,
-                                color: _statusColor(status),
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '₹${((data['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 12),
-                    // Status update actions
-                    if (status == 'pending')
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () =>
-                                  _updateStatus(docId, 'delivered'),
-                              icon: const Icon(Icons.check,
-                                  size: 16, color: Colors.green),
-                              label: const Text('Mark Delivered',
-                                  style:
-                                      TextStyle(color: Colors.green)),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                    color: Colors.green),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(8)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () =>
-                                  _updateStatus(docId, 'cancelled'),
-                              icon: const Icon(Icons.close,
-                                  size: 16, color: Colors.red),
-                              label: const Text('Cancel',
-                                  style: TextStyle(color: Colors.red)),
-                              style: OutlinedButton.styleFrom(
-                                side:
-                                    const BorderSide(color: Colors.red),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(8)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-// ─── Inventory Tab ────────────────────────────────────────────────────────────
-
-class _InventoryTab extends StatelessWidget {
-  final String distributorUid;
-  const _InventoryTab({required this.distributorUid});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('inventory')
-          .where('distributorUid', isEqualTo: distributorUid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return const _ErrorView(message: 'Failed to load inventory.');
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-
-        if (docs.isEmpty) {
-          return const _EmptyView(
-            icon: Icons.inventory_2_outlined,
-            message: 'No inventory items found.',
-          );
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) {
-            final data     = docs[i].data() as Map<String, dynamic>;
-            final stock    = (data['stock'] as num?)?.toInt() ?? 0;
-            final isLow    = stock < 10;
-
-            return Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
-                leading: CircleAvatar(
-                  backgroundColor: isLow
-                      ? Colors.red.shade50
-                      : Colors.deepPurple.shade50,
-                  child: Icon(Icons.inventory_2_outlined,
-                      color: isLow ? Colors.red : Colors.deepPurple),
-                ),
-                title: Text((data['name'] as String?) ?? '—',
-                    style:
-                        const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                    'SKU: ${(data['sku'] as String?) ?? '—'}',
-                    style: const TextStyle(fontSize: 12)),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('$stock units',
+                    const Text("ON ROUTE",
                         style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isLow ? Colors.red : Colors.black)),
-                    if (isLow)
-                      const Text('Low stock',
-                          style: TextStyle(
-                              fontSize: 10, color: Colors.red)),
+                            color: AppTheme.green,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text(name,
+                        style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    const Text("DISTRIBUTOR",
+                        style: TextStyle(
+                            color: AppTheme.green,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
-            );
-          },
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppTheme.green,
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : 'D',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              )
+            ],
+          ),
         );
       },
     );
   }
-}
 
-// ─── Salesmen Tab ─────────────────────────────────────────────────────────────
-
-class _SalesmenTab extends StatelessWidget {
-  final String distributorUid;
-  const _SalesmenTab({required this.distributorUid});
-
-  @override
-  Widget build(BuildContext context) {
+  // ─────────────────────────────────────────────
+  Widget _kpiGrid() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'salesman')
-          .where('distributorUid', isEqualTo: distributorUid)
+      stream: db
+          .collection('orders')
+          .where('assignedDistributorId', isEqualTo: widget.uid)
           .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+      builder: (_, snap) {
+        int total = 0;
+        int pending = 0;
+        int delivered = 0;
+        int failed = 0;
+        double collected = 0;
+
+        final docs = snap.data?.docs ?? [];
+
+        for (var doc in docs) {
+          final d = doc.data() as Map<String, dynamic>;
+
+          final status = _normalizeStatus(d['status'] ?? d['deliveryStatus'] ?? '');
+          final payment = (d['paymentStatus'] ?? '').toString().toLowerCase();
+
+          total++;
+
+          if (status == 'delivered') {
+            delivered++;
+          } else if (status == 'failed') {
+            failed++;
+          } else {
+            pending++;
+          }
+
+          if (payment == 'paid') {
+            final amt = d['totalAmount'];
+            if (amt != null) {
+              collected += (amt as num).toDouble();
+            }
+          }
         }
 
-        if (snapshot.hasError) {
-          return const _ErrorView(message: 'Failed to load salesmen.');
-        }
+        final kpis = [
+          _KD("Assigned", "$total", Icons.assignment_outlined,
+              AppTheme.blue, AppTheme.blueSoft),
+          _KD("Pending", "$pending", Icons.hourglass_top_rounded,
+              AppTheme.orange, AppTheme.orangeSoft),
+          _KD("Delivered", "$delivered", Icons.check_circle_outline,
+              AppTheme.green, AppTheme.greenSoft),
+          _KD("Collected", "₹${collected.toInt()}",
+              Icons.currency_rupee, AppTheme.accent, AppTheme.accentSoft),
+        ];
 
-        final docs = snapshot.data?.docs ?? [];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.55,
+            children: kpis.map((k) => _kpiCard(k)).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _kpiCard(_KD k) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(k.icon, color: k.color),
+          const Spacer(),
+          Text(k.value,
+              style: TextStyle(
+                  color: k.color,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800)),
+          Text(k.label,
+              style: const TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  Widget _pendingBanner() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: db
+          .collection('orders')
+          .where('assignedDistributorId', isEqualTo: widget.uid)
+          .snapshots(),
+      builder: (_, snap) {
+        final hasPending = (snap.data?.docs ?? []).any((doc) {
+          final d = doc.data() as Map<String, dynamic>;
+          final status = _normalizeStatus(d['status'] ?? '');
+          return status == 'pending' || status == 'assigned' || status == 'packed';
+        });
+
+        if (!hasPending) return const SizedBox();
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.orangeSoft,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.local_shipping_outlined, color: AppTheme.orange),
+              SizedBox(width: 10),
+              Expanded(child: Text("Pending Deliveries")),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  Widget _recentDeliveries() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: db
+          .collection('orders')
+          .where('assignedDistributorId', isEqualTo: widget.uid)
+          .snapshots(),
+      builder: (_, snap) {
+        final docs = snap.data?.docs ?? [];
 
         if (docs.isEmpty) {
-          return const _EmptyView(
-            icon: Icons.people_outline,
-            message: 'No salesmen assigned yet.',
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text("No deliveries yet"),
           );
         }
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) {
-            final data     = docs[i].data() as Map<String, dynamic>;
-            final isActive = (data['isActive'] as bool?) ?? false;
+        return Column(
+          children: docs.take(5).map((doc) {
+            final d = doc.data() as Map<String, dynamic>;
+            final status =
+                _normalizeStatus(d['status'] ?? d['deliveryStatus'] ?? '');
 
-            return Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.deepPurple.shade50,
-                  child: Text(
-                    ((data['name'] as String?) ?? '?')[0].toUpperCase(),
-                    style: const TextStyle(
-                        color: Colors.deepPurple,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-                title: Text((data['name'] as String?) ?? '—',
-                    style:
-                        const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text((data['email'] as String?) ?? '—',
-                    style: const TextStyle(fontSize: 12)),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? Colors.green.shade50
-                        : Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    isActive ? 'Active' : 'Inactive',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: isActive ? Colors.green : Colors.red,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
+            return ListTile(
+              title: Text(d['shopName'] ?? ''),
+              subtitle: Text("₹${d['totalAmount'] ?? 0}"),
+              trailing: Text(status),
             );
-          },
+          }).toList(),
         );
       },
     );
   }
 }
 
-// ─── Shared Widgets ───────────────────────────────────────────────────────────
-
-class _EmptyView extends StatelessWidget {
+class _KD {
+  final String label, value;
   final IconData icon;
-  final String message;
-  const _EmptyView({required this.icon, required this.message});
+  final Color color, bg;
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 12),
-          Text(message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade500)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  const _ErrorView({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 48, color: Colors.red),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.grey)),
-        ],
-      ),
-    );
-  }
+  _KD(this.label, this.value, this.icon, this.color, this.bg);
 }
