@@ -515,41 +515,315 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   }
 
   // ── PDF Export ────────────────────────────────────────────
-  Future<void> _printPDF(Map<String, dynamic> order, Map<String, dynamic> payment) async {
-    final pdf   = pw.Document();
-    final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
-    final fontData = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
-    final ttf = pw.Font.ttf(fontData);
+  Future<void> _printPDF(
+  Map<String, dynamic> order,
+  Map<String, dynamic> payment,
+) async {
 
-    pdf.addPage(pw.Page(
+  final pdf = pw.Document();
+
+  final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+
+  final date = DateTime.now();
+
+  final subtotal = (order['subTotal'] ?? 0).toDouble();
+  final gstAmt   = (order['gstAmount'] ?? 0).toDouble();
+  final gstPct   = (order['gstPercent'] ?? 18).toDouble();
+  final total    = (order['totalAmount'] ?? 0).toDouble();
+
+  // ✅ ✅ USE GOOGLE FONT (NO ASSETS REQUIRED)
+  final font = await PdfGoogleFonts.notoSansRegular();
+  final fontBold = await PdfGoogleFonts.notoSansBold();
+
+  pdf.addPage(
+    pw.Page(
+      margin: const pw.EdgeInsets.all(24),
+      build: (_) => pw.DefaultTextStyle(
+        style: pw.TextStyle(font: font), // 🔥 GLOBAL FONT FIX
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+
+            // HEADER
+            pw.Center(
+              child: pw.Text(
+                "KHUSHBOOWALA",
+                style: pw.TextStyle(
+                  font: fontBold,
+                  fontSize: 22,
+                ),
+              ),
+            ),
+
+            pw.SizedBox(height: 10),
+
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text("Invoice No: ${payment['invoiceNo'] ?? '-'}"),
+                pw.Text("Date: ${date.day}/${date.month}/${date.year}"),
+              ],
+            ),
+
+            pw.SizedBox(height: 12),
+
+            // SHOP DETAILS
+            pw.Text("Shop: ${payment['shopName'] ?? ''}"),
+            pw.Text("Contact: ${order['shopPhone'] ?? '-'}"), // ✅ removed —
+            pw.Text("Address: ${order['shopAddress'] ?? '-'}"),
+
+            pw.SizedBox(height: 12),
+
+            pw.Divider(),
+
+            // TABLE HEADER
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: pw.Text("Item",
+                      style: pw.TextStyle(font: fontBold)),
+                ),
+                pw.SizedBox(
+                  width: 40,
+                  child: pw.Text("Qty",
+                      style: pw.TextStyle(font: fontBold)),
+                ),
+                pw.SizedBox(
+                  width: 60,
+                  child: pw.Text("Price",
+                      style: pw.TextStyle(font: fontBold)),
+                ),
+                pw.SizedBox(
+                  width: 60,
+                  child: pw.Text("Total",
+                      style: pw.TextStyle(font: fontBold)),
+                ),
+              ],
+            ),
+
+            pw.Divider(),
+
+            // ITEMS
+            ...items.map((item) {
+              final name  = item['productName'] ?? '';
+              final qty   = item['qty'] ?? 0;
+              final price = item['price'] ?? 0;
+              final total = item['total'] ?? (qty * price);
+
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(child: pw.Text(name)),
+                    pw.SizedBox(width: 40, child: pw.Text("$qty")),
+                    pw.SizedBox(width: 60, child: pw.Text("Rs $price")), // ✅ replaced ₹
+                    pw.SizedBox(width: 60, child: pw.Text("Rs $total")),
+                  ],
+                ),
+              );
+            }),
+
+            pw.Divider(),
+
+            pw.SizedBox(height: 10),
+
+            // TOTALS
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Subtotal: Rs $subtotal"),
+                  pw.Text("GST ($gstPct%): Rs $gstAmt"),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    "Total: Rs $total",
+                    style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            pw.SizedBox(height: 20),
+
+            // FOOTER
+            pw.Center(
+              child: pw.Text(
+                "Thank you for your business!",
+                style: pw.TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  final bytes = await pdf.save();
+
+  if (kIsWeb) {
+  final blob = html.Blob([bytes], 'application/pdf');
+  final url = html.Url.createObjectUrlFromBlob(blob);
+
+  final anchor = html.AnchorElement(href: url)
+    ..setAttribute("download", "invoice.pdf")
+    ..click();
+
+  html.Url.revokeObjectUrl(url);
+} else {
+  await Printing.layoutPdf(
+    onLayout: (format) async => bytes,
+  );
+}
+}
+  /*Future<void> _printPDF(
+    Map<String, dynamic> order,
+    Map<String, dynamic> payment) async {
+
+  final pdf = pw.Document();
+
+  final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+
+  final fontData =
+      await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+  final ttf = pw.Font.ttf(fontData);
+
+  final date = DateTime.now();
+
+  final subtotal = (order['subTotal'] ?? 0).toDouble();
+  final gstAmt   = (order['gstAmount'] ?? 0).toDouble();
+  final gstPct   = (order['gstPercent'] ?? 18).toDouble();
+  final total    = (order['totalAmount'] ?? 0).toDouble();
+
+  pdf.addPage(
+    pw.Page(
+      margin: const pw.EdgeInsets.all(24),
       build: (_) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text("Invoice: ${payment['invoiceNo']}", style: pw.TextStyle(font: ttf, fontSize: 20)),
+
+          // ───── HEADER ─────
+          pw.Center(
+            child: pw.Text(
+              "Khushboowala",
+              style: pw.TextStyle(
+                font: ttf,
+                fontSize: 22,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+
           pw.SizedBox(height: 10),
-          pw.Text("Shop: ${payment['shopName']}", style: pw.TextStyle(font: ttf)),
+
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text("Invoice No: ${payment['invoiceNo'] ?? '-'}",
+                  style: pw.TextStyle(font: ttf)),
+              pw.Text(
+                "Date: ${date.day}/${date.month}/${date.year}",
+                style: pw.TextStyle(font: ttf),
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 12),
+
+          // ───── SHOP DETAILS ─────
+          pw.Text("Shop: ${payment['shopName'] ?? ''}",
+              style: pw.TextStyle(font: ttf)),
+          pw.Text("Contact: ${order['shopPhone'] ?? '—'}",
+              style: pw.TextStyle(font: ttf)),
+          pw.Text("Address: ${order['shopAddress'] ?? '—'}",
+              style: pw.TextStyle(font: ttf)),
+
+          pw.SizedBox(height: 12),
+
           pw.Divider(),
-          ...items.map((item) => pw.Text(
-            "${item['productName']} ×${item['qty']}  —  ₹${item['total']}",
-            style: pw.TextStyle(font: ttf),
-          )),
+
+          // ───── TABLE HEADER ─────
+          pw.Row(
+            children: [
+              pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
+              pw.SizedBox(width: 40, child: pw.Text("Qty", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
+              pw.SizedBox(width: 60, child: pw.Text("Price", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
+              pw.SizedBox(width: 60, child: pw.Text("Total", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
+            ],
+          ),
+
           pw.Divider(),
-          pw.Text("Subtotal: ₹${order['subTotal'] ?? 0}", style: pw.TextStyle(font: ttf)),
-          pw.Text("GST: ₹${order['gstAmount'] ?? 0}", style: pw.TextStyle(font: ttf)),
-          pw.Text("Total: ₹${order['totalAmount'] ?? 0}",
-            style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold, fontSize: 16)),
+
+          // ───── ITEMS ─────
+          ...items.map((item) {
+            final name  = item['productName'] ?? '';
+            final qty   = item['qty'] ?? 0;
+            final price = item['price'] ?? 0;
+            final total = item['total'] ?? (qty * price);
+
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 4),
+              child: pw.Row(
+                children: [
+                  pw.Expanded(child: pw.Text(name, style: pw.TextStyle(font: ttf))),
+                  pw.SizedBox(width: 40, child: pw.Text("$qty", style: pw.TextStyle(font: ttf))),
+                  pw.SizedBox(width: 60, child: pw.Text("₹$price", style: pw.TextStyle(font: ttf))),
+                  pw.SizedBox(width: 60, child: pw.Text("₹$total", style: pw.TextStyle(font: ttf))),
+                ],
+              ),
+            );
+          }),
+
+          pw.Divider(),
+
+          pw.SizedBox(height: 10),
+
+          // ───── TOTAL SECTION ─────
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text("Subtotal: ₹$subtotal", style: pw.TextStyle(font: ttf)),
+                pw.Text("GST ($gstPct%): ₹$gstAmt", style: pw.TextStyle(font: ttf)),
+                pw.SizedBox(height: 6),
+                pw.Text(
+                  "Total: ₹$total",
+                  style: pw.TextStyle(
+                    font: ttf,
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 20),
+
+          // ───── FOOTER ─────
+          pw.Center(
+            child: pw.Text(
+              "Thank you for your business!",
+              style: pw.TextStyle(font: ttf, fontSize: 12),
+            ),
+          ),
         ],
       ),
-    ));
+    ),
+  );
 
-    final bytes = await pdf.save();
+  final bytes = await pdf.save();
 
-    if (kIsWeb) {
-      final blob = html.Blob([bytes]);
-      final url  = html.Url.createObjectUrlFromBlob(blob);
-      html.window.open(url, "_blank");
-    } else {
-      await Printing.layoutPdf(onLayout: (_) async => bytes);
-    }
+  if (kIsWeb) {
+    final blob = html.Blob([bytes]);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.window.open(url, "_blank");
+  } else {
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
   }
+}*/
 }

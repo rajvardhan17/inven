@@ -20,19 +20,25 @@ class _DistributorShellState extends State<DistributorShell> {
   late final List<Widget> _pages;
 
   @override
-  void initState() {
-    super.initState();
+void initState() {
+  super.initState();
 
-    final user = FirebaseAuth.instance.currentUser;
-    uid = user?.uid ?? '';
+  final user = FirebaseAuth.instance.currentUser;
 
-    _pages = [
-      DistributorDashboard(uid: uid),
-      DistributorOrdersScreen(uid: uid),
-      DistributorHistoryScreen(uid: uid),
-      DistributorProfileScreen(uid: uid),
-    ];
+  if (user == null) {
+    // Optional: redirect to login
+    debugPrint("❌ User not logged in");
   }
+
+  uid = user!.uid;
+
+  _pages = [
+    DistributorDashboard(uid: uid),
+    DistributorOrdersScreen(uid: uid),
+    DistributorHistoryScreen(uid: uid),
+    DistributorProfileScreen(uid: uid),
+  ];
+}
 
   @override
   Widget build(BuildContext context) {

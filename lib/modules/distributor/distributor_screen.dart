@@ -34,7 +34,6 @@ class _DistributorDashboardState extends State<DistributorDashboard>
   }
 
   // ─────────────────────────────────────────────
-  // SAFE STATUS NORMALIZER
   String _normalizeStatus(String raw) {
     final s = raw.toLowerCase().trim();
     if (s.isEmpty) return 'pending';
@@ -42,9 +41,17 @@ class _DistributorDashboardState extends State<DistributorDashboard>
     if (s == 'packed') return 'packed';
     if (s == 'delivered') return 'delivered';
     if (s == 'failed') return 'failed';
+    if (s == 'cancelled') return 'failed';
     return s;
   }
 
+  double _toDouble(dynamic v) {
+    if (v == null) return 0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0;
+  }
+
+  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,8 +96,6 @@ class _DistributorDashboardState extends State<DistributorDashboard>
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF0D1F18), Color(0xFF122A1F)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(AppTheme.radiusLg),
             border: Border.all(color: AppTheme.green.withOpacity(0.2)),
@@ -102,32 +107,19 @@ class _DistributorDashboardState extends State<DistributorDashboard>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text("ON ROUTE",
-                        style: TextStyle(
-                            color: AppTheme.green,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
+                        style: TextStyle(color: AppTheme.green, fontSize: 10)),
                     const SizedBox(height: 8),
                     Text(name,
                         style: const TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 22,
                             fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    const Text("DISTRIBUTOR",
-                        style: TextStyle(
-                            color: AppTheme.green,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
               CircleAvatar(
-                radius: 26,
                 backgroundColor: AppTheme.green,
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'D',
-                  style: const TextStyle(color: Colors.white),
-                ),
+                child: Text(name[0].toUpperCase()),
               )
             ],
           ),
@@ -141,7 +133,7 @@ class _DistributorDashboardState extends State<DistributorDashboard>
     return StreamBuilder<QuerySnapshot>(
       stream: db
           .collection('orders')
-          .where('assignedDistributorId', isEqualTo: widget.uid)
+          .where('distributorId', isEqualTo: widget.uid) // ✅ FIXED
           .snapshots(),
       builder: (_, snap) {
         int total = 0;
@@ -155,8 +147,10 @@ class _DistributorDashboardState extends State<DistributorDashboard>
         for (var doc in docs) {
           final d = doc.data() as Map<String, dynamic>;
 
-          final status = _normalizeStatus(d['status'] ?? d['deliveryStatus'] ?? '');
-          final payment = (d['paymentStatus'] ?? '').toString().toLowerCase();
+          final status = _normalizeStatus(
+              d['status'] ?? d['deliveryStatus'] ?? '');
+          final payment =
+              (d['paymentStatus'] ?? '').toString().toLowerCase();
 
           total++;
 
@@ -169,33 +163,23 @@ class _DistributorDashboardState extends State<DistributorDashboard>
           }
 
           if (payment == 'paid') {
-            final amt = d['totalAmount'];
-            if (amt != null) {
-              collected += (amt as num).toDouble();
-            }
+            collected += _toDouble(d['totalAmount']);
           }
         }
 
         final kpis = [
-          _KD("Assigned", "$total", Icons.assignment_outlined,
-              AppTheme.blue, AppTheme.blueSoft),
-          _KD("Pending", "$pending", Icons.hourglass_top_rounded,
-              AppTheme.orange, AppTheme.orangeSoft),
-          _KD("Delivered", "$delivered", Icons.check_circle_outline,
-              AppTheme.green, AppTheme.greenSoft),
-          _KD("Collected", "₹${collected.toInt()}",
-              Icons.currency_rupee, AppTheme.accent, AppTheme.accentSoft),
+          _KD("Assigned", "$total", Icons.assignment, AppTheme.blue, AppTheme.blueSoft),
+          _KD("Pending", "$pending", Icons.hourglass_top, AppTheme.orange, AppTheme.orangeSoft),
+          _KD("Delivered", "$delivered", Icons.check_circle, AppTheme.green, AppTheme.greenSoft),
+          _KD("Collected", "₹${collected.toInt()}", Icons.currency_rupee, AppTheme.accent, AppTheme.accentSoft),
         ];
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          padding: const EdgeInsets.all(16),
           child: GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.55,
             children: kpis.map((k) => _kpiCard(k)).toList(),
           ),
         );
@@ -205,11 +189,11 @@ class _DistributorDashboardState extends State<DistributorDashboard>
 
   Widget _kpiCard(_KD k) {
     return Container(
+      margin: const EdgeInsets.all(6),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.border),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,10 +204,8 @@ class _DistributorDashboardState extends State<DistributorDashboard>
               style: TextStyle(
                   color: k.color,
                   fontSize: 22,
-                  fontWeight: FontWeight.w800)),
-          Text(k.label,
-              style: const TextStyle(
-                  color: AppTheme.textSecondary, fontSize: 11)),
+                  fontWeight: FontWeight.bold)),
+          Text(k.label),
         ],
       ),
     );
@@ -234,31 +216,22 @@ class _DistributorDashboardState extends State<DistributorDashboard>
     return StreamBuilder<QuerySnapshot>(
       stream: db
           .collection('orders')
-          .where('assignedDistributorId', isEqualTo: widget.uid)
+          .where('distributorId', isEqualTo: widget.uid) // ✅ FIXED
           .snapshots(),
       builder: (_, snap) {
         final hasPending = (snap.data?.docs ?? []).any((doc) {
           final d = doc.data() as Map<String, dynamic>;
           final status = _normalizeStatus(d['status'] ?? '');
-          return status == 'pending' || status == 'assigned' || status == 'packed';
+          return status != 'delivered' && status != 'failed';
         });
 
         if (!hasPending) return const SizedBox();
 
         return Container(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppTheme.orangeSoft,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.local_shipping_outlined, color: AppTheme.orange),
-              SizedBox(width: 10),
-              Expanded(child: Text("Pending Deliveries")),
-            ],
-          ),
+          color: AppTheme.orangeSoft,
+          child: const Text("Pending Deliveries"),
         );
       },
     );
@@ -269,7 +242,7 @@ class _DistributorDashboardState extends State<DistributorDashboard>
     return StreamBuilder<QuerySnapshot>(
       stream: db
           .collection('orders')
-          .where('assignedDistributorId', isEqualTo: widget.uid)
+          .where('distributorId', isEqualTo: widget.uid) // ✅ FIXED
           .snapshots(),
       builder: (_, snap) {
         final docs = snap.data?.docs ?? [];
@@ -281,16 +254,19 @@ class _DistributorDashboardState extends State<DistributorDashboard>
           );
         }
 
+        final sorted = docs..sort((a, b) {
+          final aTime = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+          final bTime = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+          return bTime.compareTo(aTime);
+        });
+
         return Column(
-          children: docs.take(5).map((doc) {
+          children: sorted.take(5).map((doc) {
             final d = doc.data() as Map<String, dynamic>;
-            final status =
-                _normalizeStatus(d['status'] ?? d['deliveryStatus'] ?? '');
 
             return ListTile(
               title: Text(d['shopName'] ?? ''),
               subtitle: Text("₹${d['totalAmount'] ?? 0}"),
-              trailing: Text(status),
             );
           }).toList(),
         );
