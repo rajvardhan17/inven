@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "D:/Downloads/inven/linux"
+    "cmake.sourceDirectory": "D:/Downloads/inven/linux",
+    "java.configuration.updateBuildConfiguration": "disabled"
 }

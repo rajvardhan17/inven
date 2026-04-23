@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:flutter/services.dart' show rootBundle;
 // ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:printing/printing.dart';
+import 'dart:typed_data';
 import '../../../core/app_theme.dart';
+import '../../../core/services/log_service.dart';
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
@@ -16,9 +19,11 @@ class PaymentsScreen extends StatefulWidget {
   State<PaymentsScreen> createState() => _PaymentsScreenState();
 }
 
-class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProviderStateMixin {
+class _PaymentsScreenState extends State<PaymentsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   String _filter = 'all';
+  String _search = '';
 
   @override
   void initState() {
@@ -28,9 +33,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         if (!_tabCtrl.indexIsChanging) {
           setState(() {
             switch (_tabCtrl.index) {
-              case 0: _filter = 'all'; break;
+              case 0: _filter = 'all';    break;
               case 1: _filter = 'unpaid'; break;
-              case 2: _filter = 'paid'; break;
+              case 2: _filter = 'paid';   break;
             }
           });
         }
@@ -43,6 +48,27 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     super.dispose();
   }
 
+  // ── Helpers ───────────────────────────────────────────────
+
+  double _toDouble(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v.toDouble();
+    if (v is double) return v;
+    return double.tryParse(v.toString()) ?? 0;
+  }
+
+  void _snack(String msg, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? AppTheme.red : AppTheme.green,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  // ── Build ─────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -51,87 +77,152 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         backgroundColor: AppTheme.surface,
         title: const Text("Payments"),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(49),
-          child: Column(
-            children: [
-              Container(height: 1, color: AppTheme.border),
-              TabBar(
-                controller: _tabCtrl,
-                labelColor: AppTheme.accent,
-                unselectedLabelColor: AppTheme.textSecondary,
-                indicatorColor: AppTheme.accent,
-                indicatorWeight: 2,
-                labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 0.5),
-                tabs: const [
-                  Tab(text: "ALL"),
-                  Tab(text: "UNPAID"),
-                  Tab(text: "PAID"),
-                ],
+          preferredSize: const Size.fromHeight(97),
+          child: Column(children: [
+            Container(height: 1, color: AppTheme.border),
+            // Search
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: TextField(
+                onChanged: (v) => setState(() => _search = v.toLowerCase()),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: "Search shop or invoice…",
+                  prefixIcon: const Icon(Icons.search,
+                      color: AppTheme.textSecondary, size: 18),
+                  suffixIcon: _search.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppTheme.textSecondary, size: 16),
+                          onPressed: () => setState(() => _search = ''))
+                      : null,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 6),
+            TabBar(
+              controller: _tabCtrl,
+              labelColor: AppTheme.accent,
+              unselectedLabelColor: AppTheme.textSecondary,
+              indicatorColor: AppTheme.accent,
+              indicatorWeight: 2,
+              labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  letterSpacing: 0.5),
+              tabs: const [
+                Tab(text: "ALL"),
+                Tab(text: "UNPAID"),
+                Tab(text: "PAID"),
+              ],
+            ),
+          ]),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
+        // ✅ No orderBy — avoids composite index requirement.
+        //    Single-field 'timestamp' index is auto-created by Firestore.
+        //    We sort client-side.
         stream: FirebaseFirestore.instance
             .collection('payments')
-            .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const AppLoader();
-          if (snapshot.hasError) return const Center(child: Text("Something went wrong", style: TextStyle(color: AppTheme.textSecondary)));
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const AppLoader();
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text("Error: ${snapshot.error}",
+                  style: const TextStyle(color: AppTheme.red, fontSize: 13)));
+          }
 
-          final all = snapshot.data?.docs ?? [];
-          final docs = _filter == 'all'
+          // Sort client-side descending by createdAt
+          final all = (snapshot.data?.docs ?? []).toList()
+            ..sort((a, b) {
+              final aTs = (a.data() as Map)['createdAt'] as Timestamp?;
+              final bTs = (b.data() as Map)['createdAt'] as Timestamp?;
+              if (aTs == null && bTs == null) return 0;
+              if (aTs == null) return 1;
+              if (bTs == null) return -1;
+              return bTs.compareTo(aTs);
+            });
+
+          // Tab filter
+          var docs = _filter == 'all'
               ? all
               : all.where((d) {
                   final data = d.data() as Map<String, dynamic>;
                   return (data['status'] ?? 'unpaid') == _filter;
                 }).toList();
 
-          if (docs.isEmpty) {
-            return const AppEmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: "No Payments",
-              subtitle: "Payment records will appear here",
-            );
+          // Search filter
+          if (_search.isNotEmpty) {
+            docs = docs.where((d) {
+              final data = d.data() as Map<String, dynamic>;
+              final shop    = (data['shopName'] ?? '').toString().toLowerCase();
+              final invoice = (data['invoiceNo'] ?? '').toString().toLowerCase();
+              return shop.contains(_search) || invoice.contains(_search);
+            }).toList();
           }
 
-          // Summary stats
+          // Summary stats from ALL docs (not filtered)
           double totalPaid   = 0;
           double totalUnpaid = 0;
           for (final d in all) {
             final data   = d.data() as Map<String, dynamic>;
-            final amt    = (data['totalAmount'] ?? data['amount'] ?? 0).toDouble();
+            final amt    = _toDouble(data['totalAmount'] ?? data['amount']);
             final status = (data['status'] ?? 'unpaid').toString();
             if (status == 'paid')   totalPaid   += amt;
             if (status == 'unpaid') totalUnpaid += amt;
           }
 
-          return Column(
-            children: [
+          if (docs.isEmpty) {
+            return Column(children: [
               _summaryStrip(totalPaid, totalUnpaid),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 24, top: 8),
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final doc     = docs[i];
-                    final payment = (doc.data() ?? {}) as Map<String, dynamic>;
-                    final amount  = (payment['totalAmount'] ?? payment['amount'] ?? 0).toDouble();
-                    final status  = (payment['status'] ?? 'unpaid').toString();
-                    return _paymentCard(doc.id, payment, amount, status);
-                  },
+              const Expanded(
+                child: AppEmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: "No Payments",
+                  subtitle: "Payment records will appear here",
                 ),
               ),
-            ],
-          );
+            ]);
+          }
+
+          return Column(children: [
+            _summaryStrip(totalPaid, totalUnpaid),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 32, top: 4),
+                itemCount: docs.length,
+                itemBuilder: (_, i) {
+                  final doc     = docs[i];
+                  final payment = doc.data() as Map<String, dynamic>;
+                  final amount  = _toDouble(payment['totalAmount'] ?? payment['amount']);
+                  final status  = (payment['status'] ?? 'unpaid').toString();
+                  return _PaymentCard(
+                    docId:   doc.id,
+                    payment: payment,
+                    amount:  amount,
+                    status:  status,
+                    onCollect:  _handlePayment,
+                    onViewBill: _showBill,
+                    snack:      _snack,
+                  );
+                },
+              ),
+            ),
+          ]);
         },
       ),
     );
   }
 
   // ── Summary Strip ─────────────────────────────────────────
+
   Widget _summaryStrip(double paid, double unpaid) {
     return Container(
       margin: const EdgeInsets.all(16),
@@ -142,216 +233,132 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         border: Border.all(color: AppTheme.border),
         boxShadow: AppTheme.cardShadow,
       ),
-      child: Row(
-        children: [
-          _summaryItem("Collected", "₹${paid.toInt()}", AppTheme.green, AppTheme.greenSoft),
-          Container(width: 1, height: 40, color: AppTheme.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
-          _summaryItem("Outstanding", "₹${unpaid.toInt()}", AppTheme.orange, AppTheme.orangeSoft),
-        ],
-      ),
+      child: Row(children: [
+        _summaryItem("Collected",   "₹${paid.toStringAsFixed(0)}",   AppTheme.green,  AppTheme.greenSoft),
+        Container(width: 1, height: 40, color: AppTheme.border,
+            margin: const EdgeInsets.symmetric(horizontal: 16)),
+        _summaryItem("Outstanding", "₹${unpaid.toStringAsFixed(0)}", AppTheme.orange, AppTheme.orangeSoft),
+      ]),
     );
   }
 
   Widget _summaryItem(String label, String value, Color color, Color bg) {
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(
-            color: color,
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          )),
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(
+          color: color, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+      ]),
     );
   }
 
-  // ── Payment Card ──────────────────────────────────────────
-  Widget _paymentCard(String docId, Map<String, dynamic> payment, double amount, String status) {
-    final isPaid = status == 'paid';
+  // ── Collect payment bottom sheet ──────────────────────────
 
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: isPaid ? AppTheme.greenSoft : AppTheme.orangeSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  isPaid ? Icons.check_circle_outline : Icons.hourglass_top_rounded,
-                  color: isPaid ? AppTheme.green : AppTheme.orange,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(payment['shopName'] ?? 'Unknown Shop', style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    )),
-                    const SizedBox(height: 3),
-                    Text(payment['invoiceNo'] ?? '', style: const TextStyle(
-                      color: AppTheme.textMuted, fontSize: 11, fontFamily: 'monospace')),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text("₹${amount.toStringAsFixed(2)}", style: const TextStyle(
-                    color: AppTheme.accent,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  )),
-                  const SizedBox(height: 4),
-                  StatusBadge.fromStatus(status),
-                ],
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _showBill(payment),
-                  icon: const Icon(Icons.receipt_outlined, size: 16),
-                  label: const Text("View Bill"),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.textSecondary,
-                    side: const BorderSide(color: AppTheme.border),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
-                  ),
-                ),
-              ),
-              if (!isPaid) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _handlePayment(docId, payment),
-                    icon: const Icon(Icons.payment_outlined, size: 16),
-                    label: const Text("Collect"),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Payment Flow ──────────────────────────────────────────
   void _handlePayment(String docId, Map<String, dynamic> payment) {
     String method = 'cash';
-    final total  = (payment['totalAmount'] ?? 0).toDouble();
-    final upiId  = "yourupi@okaxis";
+    final total  = _toDouble(payment['totalAmount']);
+    const upiId  = "yourupi@okaxis";
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
-      ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg))),
       builder: (_) => StatefulBuilder(
         builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.border, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
+              Center(child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.border,
+                  borderRadius: BorderRadius.circular(2)),
+              )),
               const SizedBox(height: 20),
               const Text("Collect Payment", style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              )),
+                color: AppTheme.textPrimary, fontSize: 20,
+                fontWeight: FontWeight.w800, letterSpacing: -0.5)),
               const SizedBox(height: 4),
               Text("₹${total.toStringAsFixed(2)}", style: const TextStyle(
-                color: AppTheme.accent,
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
-              )),
+                color: AppTheme.accent, fontSize: 28,
+                fontWeight: FontWeight.w900, letterSpacing: -1)),
+              if (payment['shopName'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(payment['shopName'], style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 13)),
+                ),
               const SizedBox(height: 20),
 
               // Method chips
-              Row(
-                children: [
-                  _methodChip('cash', 'Cash', Icons.money_outlined, method, (v) => setS(() => method = v)),
-                  const SizedBox(width: 10),
-                  _methodChip('upi', 'UPI', Icons.qr_code_scanner_outlined, method, (v) => setS(() => method = v)),
-                ],
-              ),
+              Row(children: [
+                _methodChip('cash',   'Cash',   Icons.money_outlined,          method, (v) => setS(() => method = v)),
+                const SizedBox(width: 8),
+                _methodChip('upi',    'UPI',    Icons.qr_code_scanner_outlined, method, (v) => setS(() => method = v)),
+                const SizedBox(width: 8),
+                _methodChip('credit', 'Credit', Icons.credit_card_outlined,     method, (v) => setS(() => method = v)),
+              ]),
               const SizedBox(height: 20),
 
+              // Method body
               if (method == 'upi')
-                Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        ),
-                        child: QrImageView(
-                          data: "upi://pay?pa=$upiId&am=$total",
-                          size: 140,
-                          foregroundColor: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text("Scan to pay ₹${total.toStringAsFixed(2)}",
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                    ],
+                Center(child: Column(children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                    child: QrImageView(
+                      data: "upi://pay?pa=$upiId&am=$total&cu=INR",
+                      size: 150,
+                      foregroundColor: Colors.black,
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  Text("Scan to pay ₹${total.toStringAsFixed(2)}",
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(upiId, style: const TextStyle(
+                    color: AppTheme.textMuted, fontSize: 11, fontFamily: 'monospace')),
+                ]))
+              else if (method == 'credit')
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppTheme.blueSoft,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    border: Border.all(color: AppTheme.blue.withOpacity(0.3))),
+                  child: Column(children: [
+                    const Icon(Icons.credit_card_outlined, color: AppTheme.blue, size: 28),
+                    const SizedBox(height: 8),
+                    Text("Credit ₹${total.toStringAsFixed(2)}", style: const TextStyle(
+                      color: AppTheme.blue, fontSize: 20, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    const Text("Amount will be recorded as credit",
+                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  ]),
                 )
               else
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: AppTheme.greenSoft,
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    border: Border.all(color: AppTheme.green.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.money_outlined, color: AppTheme.green, size: 28),
-                      const SizedBox(height: 8),
-                      Text("Collect ₹${total.toStringAsFixed(2)}", style: const TextStyle(
-                        color: AppTheme.green,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      )),
-                    ],
-                  ),
+                    border: Border.all(color: AppTheme.green.withOpacity(0.3))),
+                  child: Column(children: [
+                    const Icon(Icons.money_outlined, color: AppTheme.green, size: 28),
+                    const SizedBox(height: 8),
+                    Text("Collect ₹${total.toStringAsFixed(2)}", style: const TextStyle(
+                      color: AppTheme.green, fontSize: 20, fontWeight: FontWeight.w800)),
+                  ]),
                 ),
 
               const SizedBox(height: 20),
@@ -360,19 +367,44 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () async {
-                    await FirebaseFirestore.instance.runTransaction((txn) async {
-                      final payRef   = FirebaseFirestore.instance.collection('payments').doc(docId);
-                      final orderRef = FirebaseFirestore.instance.collection('orders').doc(payment['orderId']);
-                      txn.update(payRef, {
-                        'status': 'paid',
-                        'method': method,
-                        'paidAt': FieldValue.serverTimestamp(),
+                    try {
+                      await FirebaseFirestore.instance.runTransaction((txn) async {
+                        final payRef   = FirebaseFirestore.instance.collection('payments').doc(docId);
+                        final orderRef = FirebaseFirestore.instance.collection('orders').doc(payment['orderId']);
+                        txn.update(payRef, {
+                          'status': 'paid',
+                          'method': method,
+                          'paidAt': FieldValue.serverTimestamp(),
+                        });
+                        txn.update(orderRef, {'paymentStatus': 'paid'});
                       });
-                      txn.update(orderRef, {'paymentStatus': 'paid'});
-                    });
-                    if (ctx.mounted) Navigator.pop(ctx);
+
+                      // ✅ Log the payment event
+                      await LogService.payment(
+                        "Payment collected for ${payment['shopName'] ?? 'shop'} — ₹${total.toStringAsFixed(2)} via $method",
+                        meta: {
+                          'action':    'collected',
+                          'paymentId': docId,
+                          'orderId':   payment['orderId'],
+                          'shopId':    payment['shopId'],
+                          'amount':    total,
+                          'method':    method,
+                          'invoiceNo': payment['invoiceNo'],
+                        },
+                      );
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _snack("Payment confirmed ✓");
+                    } catch (e) {
+                      await LogService.error(
+                        "Payment failed for ${payment['shopName']}: $e",
+                        meta: {'paymentId': docId, 'module': 'payments'},
+                      );
+                      _snack("Payment failed: $e", isError: true);
+                    }
                   },
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15)),
                   child: const Text("Confirm Payment"),
                 ),
               ),
@@ -383,40 +415,42 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _methodChip(String value, String label, IconData icon, String current, Function(String) onChanged) {
+  Widget _methodChip(
+    String value, String label, IconData icon,
+    String current, ValueChanged<String> onChanged) {
     final sel = current == value;
-    return GestureDetector(
-      onTap: () => onChanged(value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: sel ? AppTheme.accentSoft : AppTheme.surface2,
-          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-          border: Border.all(color: sel ? AppTheme.accent : AppTheme.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onChanged(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: sel ? AppTheme.accentSoft : AppTheme.surface2,
+            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            border: Border.all(color: sel ? AppTheme.accent : AppTheme.border)),
+          child: Column(children: [
             Icon(icon, color: sel ? AppTheme.accent : AppTheme.textSecondary, size: 18),
-            const SizedBox(width: 8),
+            const SizedBox(height: 4),
             Text(label, style: TextStyle(
               color: sel ? AppTheme.accent : AppTheme.textSecondary,
-              fontWeight: FontWeight.w600,
-            )),
-          ],
+              fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+          ]),
         ),
       ),
     );
   }
 
-  // ── Bill View ─────────────────────────────────────────────
+  // ── View Bill ─────────────────────────────────────────────
+
   void _showBill(Map<String, dynamic> payment) async {
     try {
-      final orderId = payment['orderId'];
-      final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(orderId).get();
+      final orderId  = payment['orderId'];
+      final orderDoc = await FirebaseFirestore.instance
+          .collection('orders').doc(orderId).get();
       final order = (orderDoc.data() ?? {}) as Map<String, dynamic>;
-      final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+      final items = List<Map<String, dynamic>>.from(
+        (order['items'] is List) ? order['items'] : []);
 
       if (!mounted) return;
 
@@ -425,83 +459,96 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         backgroundColor: AppTheme.surface,
         isScrollControlled: true,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
-        ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg))),
         builder: (_) => DraggableScrollableSheet(
-          initialChildSize: 0.6,
+          initialChildSize: 0.65,
           minChildSize: 0.4,
-          maxChildSize: 0.9,
+          maxChildSize: 0.92,
           expand: false,
           builder: (_, sc) => Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 40, height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.border, borderRadius: BorderRadius.circular(2)),
-                  ),
-                ),
+                Center(child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.border,
+                    borderRadius: BorderRadius.circular(2)),
+                )),
                 const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Invoice", style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 1)),
-                        const SizedBox(height: 4),
-                        Text(payment['invoiceNo'] ?? '—', style: const TextStyle(
-                          color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w800)),
-                      ],
-                    ),
-                    StatusBadge.fromStatus(payment['status'] ?? 'unpaid'),
-                  ],
-                ),
+
+                // Invoice header
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text("INVOICE", style: TextStyle(
+                      color: AppTheme.textMuted, fontSize: 10, letterSpacing: 1.5)),
+                    const SizedBox(height: 4),
+                    Text(payment['invoiceNo'] ?? '—', style: const TextStyle(
+                      color: AppTheme.accent, fontSize: 17, fontWeight: FontWeight.w800)),
+                  ]),
+                  StatusBadge.fromStatus(payment['status'] ?? 'unpaid'),
+                ]),
                 const AccentDivider(),
-                Text(payment['shopName'] ?? '', style: const TextStyle(
+                Text(payment['shopName'] ?? '—', style: const TextStyle(
                   color: AppTheme.textSecondary, fontSize: 13)),
                 const SizedBox(height: 16),
+
+                // Items list
                 Expanded(
-                  child: ListView(
-                    controller: sc,
-                    children: [
-                      ...items.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(
-                              "${item['productName']} × ${item['qty']}",
-                              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                            )),
-                            Text("₹${item['total']}", style: const TextStyle(
-                              color: AppTheme.accent, fontWeight: FontWeight.w600, fontSize: 13)),
-                          ],
-                        ),
-                      )),
-                      const AccentDivider(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("Total", style: TextStyle(
-                            color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
-                          Text("₹${order['totalAmount'] ?? 0}", style: const TextStyle(
-                            color: AppTheme.accent, fontWeight: FontWeight.w800, fontSize: 20)),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        onPressed: () => _printPDF(order, payment),
-                        icon: const Icon(Icons.print_outlined, size: 18),
-                        label: const Text("Print Invoice"),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14)),
-                      ),
-                    ],
-                  ),
+                  child: ListView(controller: sc, children: [
+                    // Column headers
+                    Row(children: const [
+                      Expanded(flex: 4, child: Text("PRODUCT", style: TextStyle(
+                        color: AppTheme.textMuted, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w600))),
+                      Expanded(flex: 1, child: Text("QTY", style: TextStyle(
+                        color: AppTheme.textMuted, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w600))),
+                      Expanded(flex: 2, child: Text("TOTAL", textAlign: TextAlign.right, style: TextStyle(
+                        color: AppTheme.textMuted, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w600))),
+                    ]),
+                    const SizedBox(height: 8),
+                    const Divider(color: AppTheme.border, height: 1),
+
+                    ...items.map((item) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(children: [
+                        Expanded(flex: 4, child: Text(item['productName'] ?? '—',
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+                        Expanded(flex: 1, child: Text("×${item['qty'] ?? 0}",
+                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
+                        Expanded(flex: 2, child: Text(
+                          "₹${_toDouble(item['total']).toStringAsFixed(2)}",
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            color: AppTheme.accent, fontSize: 13, fontWeight: FontWeight.w600))),
+                      ]),
+                    )),
+
+                    const AccentDivider(),
+
+                    // Billing rows
+                    _billRow("Subtotal", "₹${_toDouble(order['subTotal']).toStringAsFixed(2)}", false),
+                    const SizedBox(height: 6),
+                    _billRow(
+                      "GST (${_toDouble(order['gstPercent']).toStringAsFixed(0)}%)",
+                      "₹${_toDouble(order['gstAmount']).toStringAsFixed(2)}",
+                      false),
+                    const AccentDivider(),
+                    _billRow(
+                      "Grand Total",
+                      "₹${_toDouble(order['totalAmount']).toStringAsFixed(2)}",
+                      true),
+
+                    const SizedBox(height: 20),
+
+                    ElevatedButton.icon(
+                      onPressed: () => _printPDF(order, payment),
+                      icon: const Icon(Icons.print_outlined, size: 18),
+                      label: const Text("Print / Download PDF"),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14)),
+                    ),
+                  ]),
                 ),
               ],
             ),
@@ -509,321 +556,311 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error loading bill"), backgroundColor: AppTheme.red));
+      _snack("Error loading bill", isError: true);
+      await LogService.error(
+        "Failed to load bill for payment: $e",
+        meta: {'module': 'payments'},
+      );
     }
   }
 
-  // ── PDF Export ────────────────────────────────────────────
-  Future<void> _printPDF(
-  Map<String, dynamic> order,
-  Map<String, dynamic> payment,
-) async {
-
-  final pdf = pw.Document();
-
-  final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
-
-  final date = DateTime.now();
-
-  final subtotal = (order['subTotal'] ?? 0).toDouble();
-  final gstAmt   = (order['gstAmount'] ?? 0).toDouble();
-  final gstPct   = (order['gstPercent'] ?? 18).toDouble();
-  final total    = (order['totalAmount'] ?? 0).toDouble();
-
-  // ✅ ✅ USE GOOGLE FONT (NO ASSETS REQUIRED)
-  final font = await PdfGoogleFonts.notoSansRegular();
-  final fontBold = await PdfGoogleFonts.notoSansBold();
-
-  pdf.addPage(
-    pw.Page(
-      margin: const pw.EdgeInsets.all(24),
-      build: (_) => pw.DefaultTextStyle(
-        style: pw.TextStyle(font: font), // 🔥 GLOBAL FONT FIX
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-
-            // HEADER
-            pw.Center(
-              child: pw.Text(
-                "KHUSHBOOWALA",
-                style: pw.TextStyle(
-                  font: fontBold,
-                  fontSize: 22,
-                ),
-              ),
-            ),
-
-            pw.SizedBox(height: 10),
-
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Invoice No: ${payment['invoiceNo'] ?? '-'}"),
-                pw.Text("Date: ${date.day}/${date.month}/${date.year}"),
-              ],
-            ),
-
-            pw.SizedBox(height: 12),
-
-            // SHOP DETAILS
-            pw.Text("Shop: ${payment['shopName'] ?? ''}"),
-            pw.Text("Contact: ${order['shopPhone'] ?? '-'}"), // ✅ removed —
-            pw.Text("Address: ${order['shopAddress'] ?? '-'}"),
-
-            pw.SizedBox(height: 12),
-
-            pw.Divider(),
-
-            // TABLE HEADER
-            pw.Row(
-              children: [
-                pw.Expanded(
-                  child: pw.Text("Item",
-                      style: pw.TextStyle(font: fontBold)),
-                ),
-                pw.SizedBox(
-                  width: 40,
-                  child: pw.Text("Qty",
-                      style: pw.TextStyle(font: fontBold)),
-                ),
-                pw.SizedBox(
-                  width: 60,
-                  child: pw.Text("Price",
-                      style: pw.TextStyle(font: fontBold)),
-                ),
-                pw.SizedBox(
-                  width: 60,
-                  child: pw.Text("Total",
-                      style: pw.TextStyle(font: fontBold)),
-                ),
-              ],
-            ),
-
-            pw.Divider(),
-
-            // ITEMS
-            ...items.map((item) {
-              final name  = item['productName'] ?? '';
-              final qty   = item['qty'] ?? 0;
-              final price = item['price'] ?? 0;
-              final total = item['total'] ?? (qty * price);
-
-              return pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                child: pw.Row(
-                  children: [
-                    pw.Expanded(child: pw.Text(name)),
-                    pw.SizedBox(width: 40, child: pw.Text("$qty")),
-                    pw.SizedBox(width: 60, child: pw.Text("Rs $price")), // ✅ replaced ₹
-                    pw.SizedBox(width: 60, child: pw.Text("Rs $total")),
-                  ],
-                ),
-              );
-            }),
-
-            pw.Divider(),
-
-            pw.SizedBox(height: 10),
-
-            // TOTALS
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text("Subtotal: Rs $subtotal"),
-                  pw.Text("GST ($gstPct%): Rs $gstAmt"),
-                  pw.SizedBox(height: 6),
-                  pw.Text(
-                    "Total: Rs $total",
-                    style: pw.TextStyle(
-                      font: fontBold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            pw.SizedBox(height: 20),
-
-            // FOOTER
-            pw.Center(
-              child: pw.Text(
-                "Thank you for your business!",
-                style: pw.TextStyle(fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
+  Widget _billRow(String label, String value, bool bold) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: TextStyle(
+        color: bold ? AppTheme.textPrimary : AppTheme.textSecondary,
+        fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
+        fontSize: bold ? 15 : 13)),
+      Text(value, style: TextStyle(
+        color: bold ? AppTheme.accent : AppTheme.textPrimary,
+        fontWeight: bold ? FontWeight.w800 : FontWeight.normal,
+        fontSize: bold ? 18 : 13)),
+    ],
   );
 
-  final bytes = await pdf.save();
+  // ── PDF Export ────────────────────────────────────────────
 
-  if (kIsWeb) {
-  final blob = html.Blob([bytes], 'application/pdf');
-  final url = html.Url.createObjectUrlFromBlob(blob);
+  Future<void> _printPDF(
+    Map<String, dynamic> order,
+    Map<String, dynamic> payment,
+  ) async {
+    try {
+      final pdf   = pw.Document();
+      final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+      final date  = DateTime.now();
 
-  final anchor = html.AnchorElement(href: url)
-    ..setAttribute("download", "invoice.pdf")
-    ..click();
+      final subtotal = _toDouble(order['subTotal']);
+      final gstAmt   = _toDouble(order['gstAmount']);
+      final gstPct   = _toDouble(order['gstPercent']);
+      final total    = _toDouble(order['totalAmount']);
 
-  html.Url.revokeObjectUrl(url);
+      final font     = await PdfGoogleFonts.notoSansRegular();
+      final fontBold = await PdfGoogleFonts.notoSansBold();
+
+      pdf.addPage(pw.Page(
+        margin: const pw.EdgeInsets.all(28),
+        build: (_) => pw.DefaultTextStyle(
+          style: pw.TextStyle(font: font, fontSize: 11),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header
+              pw.Center(child: pw.Text(
+                "KHUSHBOOWALA",
+                style: pw.TextStyle(font: fontBold, fontSize: 22),
+              )),
+              pw.SizedBox(height: 4),
+              pw.Center(child: pw.Text(
+                "Tax Invoice",
+                style: pw.TextStyle(font: font, fontSize: 12, color: PdfColors.grey600),
+              )),
+              pw.SizedBox(height: 16),
+              pw.Divider(thickness: 1, color: PdfColors.grey300),
+              pw.SizedBox(height: 10),
+
+              // Invoice meta
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Invoice No: ${payment['invoiceNo'] ?? '-'}",
+                    style: pw.TextStyle(font: fontBold)),
+                  pw.Text("Date: ${date.day}/${date.month}/${date.year}"),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+
+              // Shop info
+              pw.Text("Shop: ${payment['shopName'] ?? ''}"),
+              if ((order['shopPhone'] ?? '').toString().isNotEmpty)
+                pw.Text("Phone: ${order['shopPhone']}"),
+              if ((order['shopAddress'] ?? '').toString().isNotEmpty)
+                pw.Text("Address: ${order['shopAddress']}"),
+
+              pw.SizedBox(height: 14),
+              pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+
+              // Table header
+              pw.SizedBox(height: 6),
+              pw.Row(children: [
+                pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(font: fontBold))),
+                pw.SizedBox(width: 40, child: pw.Text("Qty", style: pw.TextStyle(font: fontBold))),
+                pw.SizedBox(width: 65, child: pw.Text("Price", style: pw.TextStyle(font: fontBold))),
+                pw.SizedBox(width: 65, child: pw.Text("Total", style: pw.TextStyle(font: fontBold))),
+              ]),
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+
+              // Items
+              ...items.map((item) {
+                final name  = item['productName'] ?? '';
+                final qty   = item['qty'] ?? 0;
+                final price = _toDouble(item['price']);
+                final itotal= _toDouble(item['total']);
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                  child: pw.Row(children: [
+                    pw.Expanded(child: pw.Text(name)),
+                    pw.SizedBox(width: 40, child: pw.Text("$qty")),
+                    pw.SizedBox(width: 65, child: pw.Text("Rs ${price.toStringAsFixed(2)}")),
+                    pw.SizedBox(width: 65, child: pw.Text("Rs ${itotal.toStringAsFixed(2)}")),
+                  ]),
+                );
+              }),
+
+              pw.SizedBox(height: 6),
+              pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+              pw.SizedBox(height: 8),
+
+              // Totals
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text("Subtotal:   Rs ${subtotal.toStringAsFixed(2)}"),
+                    pw.Text("GST (${gstPct.toStringAsFixed(0)}%):   Rs ${gstAmt.toStringAsFixed(2)}"),
+                    pw.SizedBox(height: 6),
+                    pw.Text("Total:   Rs ${total.toStringAsFixed(2)}",
+                      style: pw.TextStyle(font: fontBold, fontSize: 14)),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 24),
+              pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+              pw.SizedBox(height: 8),
+              pw.Center(child: pw.Text(
+                "Thank you for your business!",
+                style: pw.TextStyle(color: PdfColors.grey600, fontSize: 11),
+              )),
+            ],
+          ),
+        ),
+      ));
+
+      final bytes = await pdf.save();
+
+if (kIsWeb) {
+  await Printing.sharePdf(
+    bytes: bytes,
+    filename: 'invoice.pdf',
+  );
 } else {
   await Printing.layoutPdf(
     onLayout: (format) async => bytes,
   );
 }
+
+      await LogService.payment(
+        "Invoice printed: ${payment['invoiceNo']}",
+        meta: {
+          'action':    'printed',
+          'invoiceNo': payment['invoiceNo'],
+          'shopName':  payment['shopName'],
+        },
+      );
+    } catch (e) {
+      _snack("PDF failed: $e", isError: true);
+      await LogService.error("PDF generation failed: $e",
+          meta: {'module': 'payments'});
+    }
+  }
 }
-  /*Future<void> _printPDF(
-    Map<String, dynamic> order,
-    Map<String, dynamic> payment) async {
 
-  final pdf = pw.Document();
+// ─────────────────────────────────────────────────────────────────────────────
+//  PAYMENT CARD  (extracted widget for clean build method)
+// ─────────────────────────────────────────────────────────────────────────────
 
-  final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+class _PaymentCard extends StatelessWidget {
+  final String docId;
+  final Map<String, dynamic> payment;
+  final double amount;
+  final String status;
+  final void Function(String, Map<String, dynamic>) onCollect;
+  final void Function(Map<String, dynamic>) onViewBill;
+  final void Function(String, {bool isError}) snack;
 
-  final fontData =
-      await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
-  final ttf = pw.Font.ttf(fontData);
+  const _PaymentCard({
+    required this.docId,
+    required this.payment,
+    required this.amount,
+    required this.status,
+    required this.onCollect,
+    required this.onViewBill,
+    required this.snack,
+  });
 
-  final date = DateTime.now();
+  @override
+  Widget build(BuildContext context) {
+    final isPaid  = status == 'paid';
+    final method  = payment['method']?.toString();
+    final ts      = payment['createdAt'] as Timestamp?;
+    final date    = ts != null
+        ? "${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year}"
+        : '—';
 
-  final subtotal = (order['subTotal'] ?? 0).toDouble();
-  final gstAmt   = (order['gstAmount'] ?? 0).toDouble();
-  final gstPct   = (order['gstPercent'] ?? 18).toDouble();
-  final total    = (order['totalAmount'] ?? 0).toDouble();
-
-  pdf.addPage(
-    pw.Page(
-      margin: const pw.EdgeInsets.all(24),
-      build: (_) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
-          // ───── HEADER ─────
-          pw.Center(
-            child: pw.Text(
-              "Khushboowala",
-              style: pw.TextStyle(
-                font: ttf,
-                fontSize: 22,
-                fontWeight: pw.FontWeight.bold,
-              ),
+          Row(children: [
+            // Status icon
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: isPaid ? AppTheme.greenSoft : AppTheme.orangeSoft,
+                borderRadius: BorderRadius.circular(10)),
+              child: Icon(
+                isPaid ? Icons.check_circle_outline : Icons.hourglass_top_rounded,
+                color: isPaid ? AppTheme.green : AppTheme.orange,
+                size: 20),
             ),
-          ),
+            const SizedBox(width: 12),
 
-          pw.SizedBox(height: 10),
-
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text("Invoice No: ${payment['invoiceNo'] ?? '-'}",
-                  style: pw.TextStyle(font: ttf)),
-              pw.Text(
-                "Date: ${date.day}/${date.month}/${date.year}",
-                style: pw.TextStyle(font: ttf),
-              ),
-            ],
-          ),
-
-          pw.SizedBox(height: 12),
-
-          // ───── SHOP DETAILS ─────
-          pw.Text("Shop: ${payment['shopName'] ?? ''}",
-              style: pw.TextStyle(font: ttf)),
-          pw.Text("Contact: ${order['shopPhone'] ?? '—'}",
-              style: pw.TextStyle(font: ttf)),
-          pw.Text("Address: ${order['shopAddress'] ?? '—'}",
-              style: pw.TextStyle(font: ttf)),
-
-          pw.SizedBox(height: 12),
-
-          pw.Divider(),
-
-          // ───── TABLE HEADER ─────
-          pw.Row(
-            children: [
-              pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
-              pw.SizedBox(width: 40, child: pw.Text("Qty", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
-              pw.SizedBox(width: 60, child: pw.Text("Price", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
-              pw.SizedBox(width: 60, child: pw.Text("Total", style: pw.TextStyle(font: ttf, fontWeight: pw.FontWeight.bold))),
-            ],
-          ),
-
-          pw.Divider(),
-
-          // ───── ITEMS ─────
-          ...items.map((item) {
-            final name  = item['productName'] ?? '';
-            final qty   = item['qty'] ?? 0;
-            final price = item['price'] ?? 0;
-            final total = item['total'] ?? (qty * price);
-
-            return pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(vertical: 4),
-              child: pw.Row(
-                children: [
-                  pw.Expanded(child: pw.Text(name, style: pw.TextStyle(font: ttf))),
-                  pw.SizedBox(width: 40, child: pw.Text("$qty", style: pw.TextStyle(font: ttf))),
-                  pw.SizedBox(width: 60, child: pw.Text("₹$price", style: pw.TextStyle(font: ttf))),
-                  pw.SizedBox(width: 60, child: pw.Text("₹$total", style: pw.TextStyle(font: ttf))),
-                ],
-              ),
-            );
-          }),
-
-          pw.Divider(),
-
-          pw.SizedBox(height: 10),
-
-          // ───── TOTAL SECTION ─────
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
+            // Shop + invoice
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                pw.Text("Subtotal: ₹$subtotal", style: pw.TextStyle(font: ttf)),
-                pw.Text("GST ($gstPct%): ₹$gstAmt", style: pw.TextStyle(font: ttf)),
-                pw.SizedBox(height: 6),
-                pw.Text(
-                  "Total: ₹$total",
-                  style: pw.TextStyle(
-                    font: ttf,
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
+                Text(payment['shopName'] ?? 'Unknown Shop', style: const TextStyle(
+                  color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 3),
+                Row(children: [
+                  Text(payment['invoiceNo'] ?? '—', style: const TextStyle(
+                    color: AppTheme.textMuted, fontSize: 11, fontFamily: 'monospace')),
+                  const Text("  ·  ", style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                  Text(date, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                ]),
               ],
-            ),
-          ),
+            )),
 
-          pw.SizedBox(height: 20),
+            // Amount + badge
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text("₹${amount.toStringAsFixed(2)}", style: const TextStyle(
+                color: AppTheme.accent, fontWeight: FontWeight.w800, fontSize: 16)),
+              const SizedBox(height: 5),
+              StatusBadge.fromStatus(status),
+            ]),
+          ]),
 
-          // ───── FOOTER ─────
-          pw.Center(
-            child: pw.Text(
-              "Thank you for your business!",
-              style: pw.TextStyle(font: ttf, fontSize: 12),
+          // Payment method pill (if paid)
+          if (isPaid && method != null) ...[
+            const SizedBox(height: 10),
+            _methodPill(method),
+          ],
+
+          const SizedBox(height: 12),
+
+          // Action buttons
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => onViewBill(payment),
+                icon: const Icon(Icons.receipt_outlined, size: 16),
+                label: const Text("View Bill"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.textSecondary,
+                  side: const BorderSide(color: AppTheme.border),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm))),
+              ),
             ),
-          ),
+            if (!isPaid) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => onCollect(docId, payment),
+                  icon: const Icon(Icons.payment_outlined, size: 16),
+                  label: const Text("Collect"),
+                ),
+              ),
+            ],
+          ]),
         ],
       ),
-    ),
-  );
-
-  final bytes = await pdf.save();
-
-  if (kIsWeb) {
-    final blob = html.Blob([bytes]);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.window.open(url, "_blank");
-  } else {
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
+    );
   }
-}*/
+
+  Widget _methodPill(String method) {
+    IconData icon;
+    Color color;
+    switch (method) {
+      case 'upi':    icon = Icons.qr_code_outlined;      color = AppTheme.purple; break;
+      case 'credit': icon = Icons.credit_card_outlined;  color = AppTheme.blue;   break;
+      default:       icon = Icons.money_outlined;        color = AppTheme.green;  break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: color, size: 13),
+        const SizedBox(width: 5),
+        Text(method.toUpperCase(), style: TextStyle(
+          color: color, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+      ]),
+    );
+  }
 }

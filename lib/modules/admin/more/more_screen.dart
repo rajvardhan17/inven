@@ -7,6 +7,8 @@ import './shop_screen.dart';
 import './add_user_screen.dart';
 import './reports/reports_screen.dart';
 import './orders/order_history_screen.dart';
+import './logs/logs_screen.dart';
+import './app_settings_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -122,6 +124,16 @@ class MoreScreen extends StatelessWidget {
                     ),
                   ),
 
+                  _tile(
+                    icon: Icons.terminal,
+                    title: 'Admin Logs',
+                    color: Colors.redAccent,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => LogsScreen()),
+                    ),
+                  ),
+
                   const SizedBox(height: 15),
 
                   /// 🔹 SETTINGS SECTION
@@ -130,9 +142,10 @@ class MoreScreen extends StatelessWidget {
                     icon: Icons.settings,
                     title: 'App Settings',
                     color: AppTheme.textSecondary,
-                    onTap: () {
-                      // TODO: Navigate to settings screen
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => AppSettingsScreen()),
+                    ),
                   ),
 
                   const SizedBox(height: 20),

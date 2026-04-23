@@ -282,42 +282,35 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<SessionModel?>(
       stream: SessionManager.instance.sessionStream,
       builder: (context, snapshot) {
-        // ── Loading ──────────────────────────────────────
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SplashScreen();
         }
 
         final session = snapshot.data;
 
-        // ── Unauthenticated ──────────────────────────────
+        // ✅ IMPORTANT: do NOT logout immediately on null
         if (session == null) {
           return const LoginScreen();
         }
 
-        // ── Role routing ─────────────────────────────────
-        return _screenForRole(session.role);
+        // ✅ SAFE ROLE HANDLING
+        switch (session.role) {
+          case UserRole.admin:
+            return const MainScreen();
+
+          case UserRole.salesman:
+            return const SalesmanShell();
+
+          case UserRole.distributor:
+            return const DistributorShell();
+
+          case UserRole.user:
+          case UserRole.unknown:
+            // 🔥 IMPORTANT FIX:
+            // DON'T treat as logout, treat as loading fallback
+            return const SplashScreen();
+        }
       },
     );
-  }
-
-  Widget _screenForRole(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return const MainScreen();
-
-      case UserRole.salesman:
-        return const SalesmanShell();
-
-      case UserRole.distributor:
-        return const DistributorShell();
-
-      case UserRole.user:
-      case UserRole.unknown:
-        // Sign out unauthorised roles after the frame renders
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          SessionManager.instance.signOut();
-        });
-        return const LoginScreen();
-    }
   }
 }
