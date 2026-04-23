@@ -24,7 +24,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _loading = true);
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+  email: email,
+  actionCodeSettings: ActionCodeSettings(
+    url: 'https://khushboowala-f3063.web.app',
+    handleCodeInApp: false,
+    androidPackageName: 'com.example.inven',
+    androidInstallApp: true,
+    androidMinimumVersion: '12',
+  ),
+);
 
       _showSnack("Password reset link sent to your email");
 
