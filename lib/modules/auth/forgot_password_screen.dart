@@ -14,44 +14,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _loading = false;
 
   Future<void> _resetPassword() async {
-    final email = _emailController.text.trim();
+  final email = _emailController.text.trim();
 
-    if (email.isEmpty) {
-      _showSnack("Please enter your email");
-      return;
-    }
-
-    setState(() => _loading = true);
-
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-  email: email,
-  actionCodeSettings: ActionCodeSettings(
-    url: 'https://khushboowala-f3063.web.app',
-    handleCodeInApp: false,
-    androidPackageName: 'com.example.inven',
-    androidInstallApp: true,
-    androidMinimumVersion: '12',
-  ),
-);
-
-      _showSnack("Password reset link sent to your email");
-
-      Navigator.pop(context); // go back to login
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') {
-        _showSnack("No user found with this email");
-      } else if (e.code == 'invalid-email') {
-        _showSnack("Invalid email format");
-      } else {
-        _showSnack(e.message ?? "Something went wrong");
-      }
-    } catch (e) {
-      _showSnack("Error: $e");
-    }
-
-    setState(() => _loading = false);
+  if (email.isEmpty) {
+    _showSnack("Please enter your email");
+    return;
   }
+
+  setState(() => _loading = true);
+
+  try {
+    await FirebaseAuth.instance.sendPasswordResetEmail(
+      email: email,
+      actionCodeSettings: ActionCodeSettings(
+        url: 'https://khushboowala-f3063.web.app/reset', // 👈 IMPORTANT
+        handleCodeInApp: true,
+        androidPackageName: 'com.example.inven',
+        androidInstallApp: true,
+        androidMinimumVersion: '1',
+      ),
+    );
+
+    _showSnack("Reset link sent!");
+    Navigator.pop(context);
+  } catch (e) {
+    _showSnack("Error: $e");
+  }
+
+  setState(() => _loading = false);
+}
 
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
