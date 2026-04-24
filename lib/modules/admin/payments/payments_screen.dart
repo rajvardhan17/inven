@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import 'dart:typed_data';
 import '../../../core/app_theme.dart';
 import '../../../core/services/log_service.dart';
+import '../../../core/services/auto_notification_engine.dart';
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
@@ -394,6 +395,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                       );
 
                       if (ctx.mounted) Navigator.pop(ctx);
+                      await AutoNotificationEngine.onPaymentSuccess(
+                        orderId: payment['orderId'],
+                        amount: total,
+                      );
                       _snack("Payment confirmed ✓");
                     } catch (e) {
                       await LogService.error(
