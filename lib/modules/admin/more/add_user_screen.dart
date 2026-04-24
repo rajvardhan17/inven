@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/services/auto_notification_engine.dart';
 import '../../../core/app_theme.dart';
 
 class AddUserScreen extends StatefulWidget {
@@ -25,20 +26,30 @@ class _AddUserScreenState extends State<AddUserScreen> {
   }
 
   /// ⚙️ CHANGE ROLE
-  Future<void> _changeRole(String uid, String role) async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .update({'role': role});
+  Future<void> _changeRole(
+  String uid,
+  String role,
+  String userName,
+) async {
+  await FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .update({'role': role});
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("User assigned as $role"),
-        backgroundColor: AppTheme.surface2,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
+  // ✅ AUTO NOTIFICATION
+  await AutoNotificationEngine.onUserPromoted(
+    userName: userName,
+    newRole: role,
+  );
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text("User assigned as $role"),
+      backgroundColor: AppTheme.surface2,
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
 
   /// 🗑 DELETE USER
   Future<void> _deleteUser(String uid) async {
@@ -203,8 +214,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
                               children: [
                                 Expanded(
                                   child: ElevatedButton.icon(
-                                    onPressed: () =>
-                                        _changeRole(uid, "salesman"),
+                                    onPressed: () => _changeRole(
+                                      uid,
+                                      "salesman",
+                                      user['name'] ?? "User",
+                                    ),
                                     icon: const Icon(Icons.work, size: 18),
                                     label: const Text("Salesman"),
                                     style: ElevatedButton.styleFrom(
@@ -224,8 +238,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: ElevatedButton.icon(
-                                    onPressed: () =>
-                                        _changeRole(uid, "distributor"),
+                                    onPressed: () => _changeRole(
+                                      uid,
+                                      "distributor",
+                                      user['name'] ?? "User",
+                                    ),
                                     icon: const Icon(
                                         Icons.local_shipping,
                                         size: 18),

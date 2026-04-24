@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+
 import '../../../core/app_theme.dart';
+import '../notifications/notification_screen.dart';
 
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key});
@@ -143,7 +145,53 @@ class _AdminHomeState extends State<AdminHome> with TickerProviderStateMixin {
             children: [
               _iconBtn(Icons.dark_mode_outlined),
               const SizedBox(width: 8),
-              _iconBtn(Icons.notifications_outlined),
+              StreamBuilder<QuerySnapshot>(
+  stream: db
+      .collection('notifications')
+      .where('roleTarget', isEqualTo: 'admin')
+      .where('isRead', isEqualTo: false)
+      .snapshots(),
+  builder: (context, snapshot) {
+    int count = snapshot.data?.docs.length ?? 0;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AdminNotificationScreen(),
+          ),
+        );
+      },
+      child: Stack(
+        children: [
+          _iconBtn(Icons.notifications_outlined),
+
+          if (count > 0)
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  count > 9 ? "9+" : "$count",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  },
+),
             ],
           )
         ],

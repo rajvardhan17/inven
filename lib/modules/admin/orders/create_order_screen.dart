@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/app_theme.dart';
+import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/auto_notification_engine.dart';
 
 class CreateOrderScreen extends StatefulWidget {
   final List<Map<String, dynamic>> shops;
@@ -65,8 +68,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   void _removeItem(int index) => setState(() => orderItems.removeAt(index));
-
-  void _placeOrder() {
+//PLACE ORDER
+  /*void _placeOrder() {
     if (selectedShopId == null) return _err("Please select a shop");
     if (orderItems.isEmpty)    return _err("Add at least one item");
 
@@ -87,7 +90,43 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       'status':        'pending',
       'paymentStatus': 'unpaid',
     });
-  }
+
+  }*/
+  void _placeOrder() async {
+  if (selectedShopId == null) return _err("Please select a shop");
+  if (orderItems.isEmpty) return _err("Add at least one item");
+
+  final shop = widget.shops.firstWhere(
+    (s) => s['id'].toString() == selectedShopId,
+  );
+
+  final orderId = DateTime.now().millisecondsSinceEpoch.toString();
+
+  // 1️⃣ FIRESTORE NOTIFICATION (ADMIN ALERT)
+  await AutoNotificationEngine.onOrderCreated(
+  orderId: orderId,
+  shopName: shop['shopName'],
+  amount: grandTotal,
+);
+
+  // 2️⃣ RETURN ORDER DATA
+  Navigator.pop(context, {
+    'orderId': orderId,
+    'shopId': selectedShopId,
+    'shopName': shop['shopName'] ?? shop['name'] ?? 'Unknown',
+    'shopAddress': shop['address'] ?? shop['shopAddress'] ?? '',
+    'shopPhone': shop['phone'] ?? '',
+    'items': orderItems,
+    'subTotal': subTotal,
+    'gstPercent': gstPercent,
+    'gstAmount': gstAmount,
+    'totalAmount': grandTotal,
+    'note': noteController.text.trim(),
+    'status': 'pending',
+    'paymentStatus': 'unpaid',
+    'createdAt': Timestamp.now(),
+  });
+}//closed
 
   void _err(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
