@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/app_theme.dart';
+import '../admin/invoices/presentation/screens/invoice_detail_screen.dart';
+import '../../../models/invoice_model.dart';
+import 'edit_order_quantities_screen.dart';
 
 // ───────────────── STATUS SYSTEM ─────────────────
 
@@ -130,6 +133,13 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
     return [];
   }
 
+  String _formatValue(dynamic v) {
+    if (v == null) return "N/A";
+    if (v is String) return v;
+    if (v is Map) return v.values.join(", ");
+    return v.toString();
+  }
+
   // ───────────────── BUILD ─────────────────
 
   @override
@@ -186,7 +196,7 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
             itemCount: filtered.length,
             itemBuilder: (_, i) {
               final d = filtered[i].data() as Map<String, dynamic>;
-              return _orderCard(filtered[i].id, d);
+              return _orderCard(filtered[i].id, d, filtered[i]);
             },
           );
         },
@@ -196,13 +206,13 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
 
   // ───────────────── ORDER CARD ─────────────────
 
-  Widget _orderCard(String id, Map<String, dynamic> d) {
+  Widget _orderCard(String id, Map<String, dynamic> d, DocumentSnapshot doc) {
     final status = OrderStatusX.fromKey(d["status"]);
     final items = _parseItems(d["items"]);
     final total = _toDouble(d["totalAmount"]);
 
     return GestureDetector(
-      onTap: () => _openOrderDetails(id, d),
+      onTap: () => _openOrderDetails(id, d, doc),
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         child: Padding(
@@ -216,7 +226,7 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      d["shopName"] ?? "Shop",
+                      _formatValue(d["shopName"] ?? d["name"]),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -231,7 +241,12 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
               ),
               const SizedBox(height: 8),
               Text("Items: ${items.length}"),
-              Text("Total: ₹$total"),
+              Text("Total: ₹${total.toStringAsFixed(2)}"),
+              if (d['isEdited'] == true)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text("Modified Order", style: TextStyle(color: AppTheme.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
             ],
           ),
         ),
@@ -241,7 +256,7 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
 
   // ───────────────── DETAILS ─────────────────
 
-  void _openOrderDetails(String id, Map<String, dynamic> d) async {
+  void _openOrderDetails(String id, Map<String, dynamic> d, DocumentSnapshot doc) async {
     final shopId = d["shopId"];
     Map<String, dynamic>? shop;
 
@@ -254,68 +269,157 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
 
     final items = _parseItems(d["items"]);
     final total = _toDouble(d["totalAmount"]);
+    final status = OrderStatusX.fromKey(d["status"]);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) {
         return Padding(
-          padding: const EdgeInsets.all(16),
-          child: ListView(
-            shrinkWrap: true,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-              Text(d["shopName"] ?? "Shop",
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-              const SizedBox(height: 10),
-
-              Text("📍 ${shop?["address"] ?? "N/A"}"),
-              Text("📞 ${shop?["phone"] ?? "N/A"}"),
-              Text("👤 ${shop?["ownerName"] ?? "N/A"}"),
-
-              const Divider(),
-
-              const Text("Items", style: TextStyle(fontWeight: FontWeight.bold)),
-
-              ...items.map((i) => ListTile(
-                title: Text(i["productName"] ?? "Item"),
-                subtitle: Text("Qty: ${i["qty"]}"),
-                trailing: Text("₹${i["price"]}"),
-              )),
-
-              const Divider(),
-
-              Text("Total: ₹$total",
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 20),
-
-              // PAY NOW
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _showPaymentOptions(id, total);
-                },
-                child: const Text("Pay Now"),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(_formatValue(d["shopName"] ?? d["name"]),
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  ),
+                  Text("₹${_toDouble(total).toStringAsFixed(2)}", style: const TextStyle(color: AppTheme.accent, fontSize: 20, fontWeight: FontWeight.w900)),
+                ],
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
 
-              // PAY LATER
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                onPressed: () async {
-                  await _completeOrder(id, false);
-                  if (mounted) Navigator.pop(context);
-                },
-                child: const Text("Pay Later"),
+              _infoRow(Icons.location_on_outlined, _formatValue(shop?["address"])),
+              _infoRow(Icons.phone_outlined, _formatValue(shop?["phone"])),
+              _infoRow(Icons.person_outline, _formatValue(shop?["ownerName"])),
+
+              const Divider(height: 32),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Items", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  if (!status.isTerminal)
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => EditOrderQuantitiesScreen(orderId: id, orderData: d)));
+                      }, 
+                      icon: const Icon(Icons.edit_note, size: 18),
+                      label: const Text("Adjust Items"),
+                    ),
+                ],
               ),
+
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.3),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: items.map((i) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_formatValue(i["productName"] ?? "Item"), style: const TextStyle(fontSize: 14)),
+                    subtitle: Text("Qty: ${_formatValue(i["qty"])}", style: const TextStyle(fontSize: 12)),
+                    trailing: Text("₹${(_toDouble(i["price"]) * _toDouble(i["qty"])).toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                  )).toList(),
+                ),
+              ),
+
+              const Divider(height: 32),
+
+              // ACTION BUTTONS
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        final invoice = InvoiceModel.fromFirestore(doc);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoice: invoice)));
+                      },
+                      icon: const Icon(Icons.receipt_long),
+                      label: const Text("View Bill"),
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                    ),
+                  ),
+                  if (!status.isTerminal) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showPaymentOptions(id, total);
+                        },
+                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                        child: const Text("Confirm Delivery"),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+
+              if (!status.isTerminal) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => _confirmCancel(id),
+                    child: const Text("Cancel Order", style: TextStyle(color: AppTheme.red)),
+                  ),
+                ),
+              ],
+              
+              const SizedBox(height: 20),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: AppTheme.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
+  void _confirmCancel(String id) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text("Cancel Order?"),
+        content: const Text("This action cannot be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("KEEP ORDER")),
+          TextButton(
+            onPressed: () async {
+              await db.collection("orders").doc(id).update({"status": OrderStatus.cancelled.key});
+              if (mounted) {
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Close sheet
+              }
+            },
+            child: const Text("CANCEL", style: TextStyle(color: AppTheme.red)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -325,33 +429,40 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) {
         return Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-
-              const Text("Select Payment Method",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-
-              const SizedBox(height: 20),
-
+              const Text("Select Payment Method", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 24),
               ListTile(
-                leading: const Icon(Icons.money),
+                leading: const Icon(Icons.money, color: AppTheme.green),
                 title: const Text("Cash"),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   Navigator.pop(context);
                   await _completeOrder(orderId, true);
                 },
               ),
-
               ListTile(
-                leading: const Icon(Icons.qr_code),
+                leading: const Icon(Icons.qr_code, color: AppTheme.accent),
                 title: const Text("Online (QR)"),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.pop(context);
                   _showQR(orderId, amount);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.history, color: AppTheme.orange),
+                title: const Text("Pay Later (Credit)"),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _completeOrder(orderId, false);
                 },
               ),
             ],
@@ -365,38 +476,45 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
 
   void _showQR(String orderId, double amount) {
     final qrUrl =
-        "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=yourupi@bank&pn=Shop&am=$amount&cu=INR";
+        "upi://pay?pa=khushboowala@okaxis&pn=KhushbooWala&am=$amount&cu=INR";
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) {
         return Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Text("Scan & Pay", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 24),
+              
+              // Use real QR widget if possible, else image
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                child: Image.network(
+                  "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=$qrUrl",
+                  height: 200,
+                  width: 200,
+                ),
+              ),
 
-              const Text("Scan & Pay",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-
-              const SizedBox(height: 20),
-
-              Image.network(qrUrl, height: 200),
-
-              const SizedBox(height: 20),
-
-              const Text("After payment click below"),
-
-              const SizedBox(height: 10),
-
-              ElevatedButton(
-                onPressed: () async {
-                  await _completeOrder(orderId, true);
-                  if (mounted) Navigator.pop(context);
-                },
-                child: const Text("I've Paid"),
+              const SizedBox(height: 24),
+              const Text("Confirm with customer after scan"),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await _completeOrder(orderId, true);
+                    if (mounted) Navigator.pop(context);
+                  },
+                  child: const Text("PAYMENT CONFIRMED"),
+                ),
               ),
             ],
           ),
@@ -413,6 +531,14 @@ class _DistributorOrdersScreenState extends State<DistributorOrdersScreen>
       "paymentStatus": paid ? "paid" : "unpaid",
       "deliveredAt": FieldValue.serverTimestamp(),
       if (paid) "paidAt": FieldValue.serverTimestamp(),
+    });
+
+    // Update payment record too
+    final payRef = db.collection('payments').doc(id);
+    await payRef.update({
+      'status': paid ? 'paid' : 'unpaid',
+      'deliveredAt': FieldValue.serverTimestamp(),
+      if (paid) 'paidAt': FieldValue.serverTimestamp(),
     });
   }
 }

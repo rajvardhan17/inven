@@ -7,6 +7,7 @@ import 'dashboard/AdminHome.dart';
 import 'inventory/InventoryScreen.dart';
 import 'payments/payments_screen.dart';
 import 'orders/orders_screen.dart';
+import 'invoices/presentation/screens/invoice_dashboard_screen.dart';
 import 'more/more_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _MainScreenState extends State<MainScreen> {
     const InventoryScreen(),
     const PaymentsScreen(),
     const OrdersScreen(),
+    const InvoiceDashboardScreen(),
     const MoreScreen(),
   ];
 
@@ -83,6 +85,11 @@ class _MainScreenState extends State<MainScreen> {
               label: "Orders",
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_outlined),
+              activeIcon: Icon(Icons.receipt_long),
+              label: "Invoices",
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.more_horiz),
               activeIcon: Icon(Icons.more_vert),
               label: "More",
@@ -121,7 +128,8 @@ class _MainScreenState extends State<MainScreen> {
           _drawerItem(Icons.inventory, "Inventory", 1),
           _drawerItem(Icons.payment, "Payments", 2),
           _drawerItem(Icons.shopping_cart, "Orders", 3),
-          _drawerItem(Icons.more_horiz, "More", 4),
+          _drawerItem(Icons.receipt_long, "Invoices", 4),
+          _drawerItem(Icons.more_horiz, "More", 5),
 
           const Divider(color: AppTheme.border),
 

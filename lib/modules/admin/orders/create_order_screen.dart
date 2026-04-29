@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/app_theme.dart';
-import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/auto_notification_engine.dart';
 
 class CreateOrderScreen extends StatefulWidget {
@@ -24,7 +23,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   final qtyController   = TextEditingController(text: '1');
   final priceController = TextEditingController();
-  final gstController   = TextEditingController(text: '18');
+  final hsnController   = TextEditingController();
+  final cgstController  = TextEditingController(text: '2.5');
+  final sgstController  = TextEditingController(text: '2.5');
   final noteController  = TextEditingController();
 
   List<Map<String, dynamic>> orderItems = [];
@@ -40,93 +41,85 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
   }
 
-  double get subTotal   => orderItems.fold(0.0, (s, i) => s + (i['total'] as double));
-  double get gstPercent => double.tryParse(gstController.text) ?? 0;
-  double get gstAmount  => (subTotal * gstPercent) / 100;
-  double get grandTotal => subTotal + gstAmount;
+  double get subTotal => orderItems.fold(0.0, (s, i) => s + (i['total'] as double));
+  double get totalCgst => orderItems.fold(0.0, (s, i) => s + (i['cgstAmount'] as double));
+  double get totalSgst => orderItems.fold(0.0, (s, i) => s + (i['sgstAmount'] as double));
+  double get grandTotal => subTotal + totalCgst + totalSgst;
 
   // ── Actions ───────────────────────────────────────────────
 
   void _addItem() {
     if (selectedProduct == null) return _err("Please select a product");
-    final qty   = int.tryParse(qtyController.text) ?? 0;
+    final qty   = double.tryParse(qtyController.text) ?? 0;
     final price = double.tryParse(priceController.text) ?? 0;
+    final cgst  = double.tryParse(cgstController.text) ?? 0;
+    final sgst  = double.tryParse(sgstController.text) ?? 0;
+    final hsn   = hsnController.text.trim().isEmpty ? '0000' : hsnController.text.trim();
+
     if (qty <= 0 || price <= 0) return _err("Enter valid quantity & price");
+
+    final baseTotal = qty * price;
+    final cgstAmt   = (baseTotal * cgst) / 100;
+    final sgstAmt   = (baseTotal * sgst) / 100;
 
     setState(() {
       orderItems.add({
         'productId':   selectedProductId,
         'productName': selectedProduct!['name'] ?? 'Item',
+        'hsn':         hsn,
         'qty':         qty,
         'price':       price,
-        'total':       (qty * price).toDouble(),
+        'cgstPercent': cgst,
+        'sgstPercent': sgst,
+        'cgstAmount':  cgstAmt,
+        'sgstAmount':  sgstAmt,
+        'total':       baseTotal, // Subtotal for this item
+        'grandTotal':  baseTotal + cgstAmt + sgstAmt,
       });
       qtyController.text   = '1';
       priceController.text = '';
+      hsnController.text   = '';
       selectedProductId    = null;
     });
   }
 
   void _removeItem(int index) => setState(() => orderItems.removeAt(index));
-//PLACE ORDER
-  /*void _placeOrder() {
+
+  void _placeOrder() async {
     if (selectedShopId == null) return _err("Please select a shop");
-    if (orderItems.isEmpty)    return _err("Add at least one item");
+    if (orderItems.isEmpty) return _err("Add at least one item");
 
     final shop = widget.shops.firstWhere(
-      (s) => s['id'].toString() == selectedShopId);
+      (s) => s['id'].toString() == selectedShopId,
+    );
+
+    final orderId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    await AutoNotificationEngine.onOrderCreated(
+      orderId: orderId,
+      shopName: shop['shopName'] ?? shop['name'] ?? 'Unknown',
+      amount: grandTotal,
+    );
+
+    if (!mounted) return;
 
     Navigator.pop(context, {
-      'shopId':        selectedShopId,
-      'shopName':      shop['shopName'] ?? shop['name'] ?? 'Unknown',
-      'shopAddress':   shop['address'] ?? shop['shopAddress'] ?? '',
-      'shopPhone':     shop['phone'] ?? '',
-      'items':         orderItems,
-      'subTotal':      subTotal,
-      'gstPercent':    gstPercent,
-      'gstAmount':     gstAmount,
-      'totalAmount':   grandTotal,
-      'note':          noteController.text.trim(),
-      'status':        'pending',
+      'orderId': orderId,
+      'shopId': selectedShopId,
+      'shopName': shop['shopName'] ?? shop['name'] ?? 'Unknown',
+      'shopAddress': shop['address'] ?? shop['shopAddress'] ?? '',
+      'shopPhone': shop['phone'] ?? '',
+      'items': orderItems,
+      'subTotal': subTotal,
+      'cgstAmount': totalCgst,
+      'sgstAmount': totalSgst,
+      'totalAmount': grandTotal,
+      'note': noteController.text.trim(),
+      'status': 'pending',
       'paymentStatus': 'unpaid',
+      'createdAt': Timestamp.now(),
     });
-
-  }*/
-  void _placeOrder() async {
-  if (selectedShopId == null) return _err("Please select a shop");
-  if (orderItems.isEmpty) return _err("Add at least one item");
-
-  final shop = widget.shops.firstWhere(
-    (s) => s['id'].toString() == selectedShopId,
-  );
-
-  final orderId = DateTime.now().millisecondsSinceEpoch.toString();
-
-  // 1️⃣ FIRESTORE NOTIFICATION (ADMIN ALERT)
-  await AutoNotificationEngine.onOrderCreated(
-  orderId: orderId,
-  shopName: shop['shopName'],
-  amount: grandTotal,
-);
-
-  // 2️⃣ RETURN ORDER DATA
-  Navigator.pop(context, {
-    'orderId': orderId,
-    'shopId': selectedShopId,
-    'shopName': shop['shopName'] ?? shop['name'] ?? 'Unknown',
-    'shopAddress': shop['address'] ?? shop['shopAddress'] ?? '',
-    'shopPhone': shop['phone'] ?? '',
-    'items': orderItems,
-    'subTotal': subTotal,
-    'gstPercent': gstPercent,
-    'gstAmount': gstAmount,
-    'totalAmount': grandTotal,
-    'note': noteController.text.trim(),
-    'status': 'pending',
-    'paymentStatus': 'unpaid',
-    'createdAt': Timestamp.now(),
-  });
-}//closed
+  }
 
   void _err(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -137,15 +130,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     ));
   }
 
-  // ── Build ─────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
         backgroundColor: AppTheme.surface,
-        title: const Text("Create Order"),
+        title: const Text("Create Tax Invoice"),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: AppTheme.border),
@@ -158,7 +149,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           const SectionHeader(title: "Select Shop"),
           _shopPicker(),
 
-          const SectionHeader(title: "Add Products"),
+          const SectionHeader(title: "Add Products (Tax Inclusive)"),
           _productPicker(),
 
           if (orderItems.isNotEmpty) ...[
@@ -186,8 +177,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
   }
 
-  // ── Shop Picker ───────────────────────────────────────────
-
   Widget _shopPicker() {
     return AppCard(
       child: DropdownButtonFormField<String>(
@@ -201,21 +190,18 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         decoration: _dropdownDecoration("Shop", Icons.store_outlined),
         items: widget.shops.map((s) => DropdownMenuItem(
           value: s['id'].toString(),
-          child: Text(s['shopName'] ?? 'No Name'),
+          child: Text(s['shopName'] ?? s['name'] ?? 'No Name'),
         )).toList(),
         onChanged: (v) => setState(() => selectedShopId = v),
       ),
     );
   }
 
-  // ── Product Picker ────────────────────────────────────────
-
   Widget _productPicker() {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product dropdown
           DropdownButtonFormField<String>(
             value: selectedProductId,
             hint: const Text("Choose a product",
@@ -236,25 +222,34 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               setState(() {
                 selectedProductId = v;
                 final p = selectedProduct;
-                if (p != null) priceController.text = p['price'].toString();
+                if (p != null) {
+                  priceController.text = p['price'].toString();
+                  hsnController.text = p['hsn'] ?? '';
+                }
               });
             },
           ),
 
-          const AccentDivider(),
-
-          // Qty / Price / GST row
+          const SizedBox(height: 12),
+          
           Row(children: [
-            Expanded(child: _inlineField(qtyController,   "Qty",    Icons.format_list_numbered_outlined, TextInputType.number)),
+            Expanded(child: _inlineField(qtyController, "Qty", Icons.numbers, TextInputType.number)),
             const SizedBox(width: 10),
-            Expanded(child: _inlineField(priceController, "Price ₹",Icons.currency_rupee,                TextInputType.number)),
+            Expanded(child: _inlineField(priceController, "Price", Icons.currency_rupee, TextInputType.number)),
             const SizedBox(width: 10),
-            Expanded(child: _inlineField(gstController,   "GST %",  Icons.percent_rounded,               TextInputType.number)),
+            Expanded(child: _inlineField(hsnController, "HSN", Icons.tag, TextInputType.text)),
+          ]),
+
+          const SizedBox(height: 10),
+          
+          Row(children: [
+            Expanded(child: _inlineField(cgstController, "CGST %", Icons.percent, TextInputType.number)),
+            const SizedBox(width: 10),
+            Expanded(child: _inlineField(sgstController, "SGST %", Icons.percent, TextInputType.number)),
           ]),
 
           const SizedBox(height: 14),
 
-          // Add item button
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -275,8 +270,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
   }
 
-  // ── Items List ────────────────────────────────────────────
-
   Widget _itemsList() {
     return AppCard(
       child: Column(
@@ -285,7 +278,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           final isLast = i == orderItems.length - 1;
           return Column(children: [
             Row(children: [
-              // Index badge
               Container(
                 width: 32, height: 32,
                 decoration: BoxDecoration(
@@ -295,19 +287,20 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   color: AppTheme.accent, fontWeight: FontWeight.w700, fontSize: 12))),
               ),
               const SizedBox(width: 12),
-              // Product + qty info
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(item['productName'] ?? '—', style: const TextStyle(
                   color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-                Text("₹${item['price']} × ${item['qty']}",
+                Text("₹${item['price']} × ${item['qty']} (HSN: ${item['hsn']})",
                   style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               ])),
-              // Total
-              Text("₹${(item['total'] as double).toStringAsFixed(2)}",
-                style: const TextStyle(
-                  color: AppTheme.accent, fontWeight: FontWeight.w700, fontSize: 14)),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text("₹${(item['grandTotal'] as double).toStringAsFixed(2)}",
+                  style: const TextStyle(
+                    color: AppTheme.accent, fontWeight: FontWeight.w700, fontSize: 14)),
+                Text("Tax: ₹${((item['cgstAmount'] as double) + (item['sgstAmount'] as double)).toStringAsFixed(2)}",
+                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 10)),
+              ]),
               const SizedBox(width: 8),
-              // Delete
               GestureDetector(
                 onTap: () => _removeItem(i),
                 child: Container(
@@ -327,16 +320,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
   }
 
-  // ── Bill Summary ──────────────────────────────────────────
-
   Widget _billSummary() {
     return AppCard(
       child: Column(children: [
-        _billRow("Subtotal",                       "₹${subTotal.toStringAsFixed(2)}",   false),
+        _billRow("Subtotal", "₹${subTotal.toStringAsFixed(2)}", false),
         const SizedBox(height: 8),
-        _billRow("GST (${gstPercent.toStringAsFixed(0)}%)", "₹${gstAmount.toStringAsFixed(2)}", false),
+        _billRow("CGST Total", "₹${totalCgst.toStringAsFixed(2)}", false),
+        _billRow("SGST Total", "₹${totalSgst.toStringAsFixed(2)}", false),
         const AccentDivider(),
-        _billRow("Grand Total",                    "₹${grandTotal.toStringAsFixed(2)}", true),
+        _billRow("Grand Total", "₹${grandTotal.toStringAsFixed(2)}", true),
       ]),
     );
   }
@@ -354,8 +346,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     ]);
   }
 
-  // ── Bottom Bar ────────────────────────────────────────────
-
   Widget _placeOrderBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -368,7 +358,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Total", style: TextStyle(
+            const Text("Total (incl. tax)", style: TextStyle(
               color: AppTheme.textSecondary, fontSize: 12)),
             Text("₹${grandTotal.toStringAsFixed(2)}", style: const TextStyle(
               color: AppTheme.accent, fontWeight: FontWeight.w800,
@@ -388,8 +378,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       ]),
     );
   }
-
-  // ── Form Fields ───────────────────────────────────────────
 
   InputDecoration _dropdownDecoration(String label, IconData icon) {
     return InputDecoration(
