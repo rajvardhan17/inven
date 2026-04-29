@@ -5,6 +5,10 @@ import 'package:printing/printing.dart';
 class InvoiceService {
   static Future<void> generateInvoice(Map<String, dynamic> order) async {
     final pdf = pw.Document();
+    
+    // Load font that supports Indian Rupee symbol
+    final font = await PdfGoogleFonts.notoSansRegular();
+    final boldFont = await PdfGoogleFonts.notoSansBold();
 
     final items = (order["items"] ?? []) as List;
     final subTotal = (order["subTotal"] ?? 0).toDouble();
@@ -14,13 +18,14 @@ class InvoiceService {
 
     pdf.addPage(
       pw.Page(
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
         build: (context) => pw.Padding(
           padding: const pw.EdgeInsets.all(16),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // 🔥 HEADER
-              pw.Text("INVOICE",
+              pw.Text("TAX INVOICE",
                   style: pw.TextStyle(
                       fontSize: 24, fontWeight: pw.FontWeight.bold)),
 
@@ -76,6 +81,9 @@ class InvoiceService {
                 ),
               ),
 
+              pw.SizedBox(height: 10),
+              pw.Text("Total in Words: ${convertToWords(total.toInt())} Only", style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic)),
+
               pw.SizedBox(height: 20),
 
               pw.Text(
@@ -104,5 +112,23 @@ class InvoiceService {
         ),
       ),
     );
+  }
+
+  static String convertToWords(int number) {
+    if (number == 0) return "Zero";
+    
+    const units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+    
+    String convert(int n) {
+      if (n < 20) return units[n];
+      if (n < 100) return tens[n ~/ 10] + (n % 10 != 0 ? " ${units[n % 10]}" : "");
+      if (n < 1000) return "${units[n ~/ 100]} Hundred${n % 100 != 0 ? " ${convert(n % 100)}" : ""}";
+      if (n < 100000) return "${convert(n ~/ 1000)} Thousand${n % 1000 != 0 ? " ${convert(n % 1000)}" : ""}";
+      if (n < 10000000) return "${convert(n ~/ 100000)} Lakh${n % 100000 != 0 ? " ${convert(n % 100000)}" : ""}";
+      return "${convert(n ~/ 10000000)} Crore${n % 10000000 != 0 ? " ${convert(n % 10000000)}" : ""}";
+    }
+    
+    return "Indian Rupee ${convert(number)}";
   }
 }
